@@ -4,19 +4,28 @@
 --- MOD_AUTHOR: [Thezudik]
 --- MOD_DESCRIPTION: Your favorite toons as Jokers :).
 --- PREFIX: dwjokers
---- VERSION: 0.8.2
+--- VERSION: 0.9.5
 ----------------------------------------------
 ------------MOD CODE -------------------------
 
 
 ------------ GLOBAL VARIABLES ------------
 
--- Global variable para Gigi JAJAJA take the L lol JACKPOT BIG MONEY
+-- Global variable para sprites de Gigi JAJAJA take the L lol JACKPOT BIG MONEY
 G.dwjokers_gigi_state_sprites = {
 	{ x = 4, y = 3 },	-- Normal
 	{ x = 6, y = 0}		-- L
 }
 
+-- G.dwjokers_delete_run : marca si la run esta siendo borrada o no ahora mismo
+
+-- G.dwjokers_bassie_exists : marca si Bassie existe en tu deck
+
+-- G.dwjokers_vee_exists : marca si Vee existe en tu deck
+
+-- G.dwjokers_bobette_bonus : bonus multiplicativo individual de Bobette (default: 2)
+
+-- G.dwjokers_editing_vee : carta de Vee esta abriendo el super menu ahora mismo
 
 ------------ CUSTOM SETS, POOLS y AREAS --------------
 
@@ -33,9 +42,10 @@ SMODS.current_mod.custom_card_areas = function(game)
 	)
 
 	-- Basket area para Bassie
+	-- OJO: las cartas de la UI de la basket son una copia de las originales.
 		game.dwjokers_bassie_basket = CardArea(
 		game.jokers.T.x, 
-		game.jokers.T.y - 2,
+		game.jokers.T.y -10,
         game.jokers.T.w, 
 		game.jokers.T.h / 2,
         { card_limit = 0, type = 'shop', highlight_limit = 1 }
@@ -114,6 +124,15 @@ SMODS.ObjectType ({
 
 ------------ HOOKS --------------
 
+-- Game delete run hook para evitar crasheos con remove card (no se si es mala o PESIMA practica)
+local original_delete_run = Game.delete_run
+function Game:delete_run()
+	G.dwjokers_delete_run = true
+	local ret = original_delete_run(self)
+	G.dwjokers_delete_run = false
+	return ret
+end
+
 -- Card hover hook para un hovered context
 local original_card_hover = Card.hover
 function Card:hover()
@@ -144,15 +163,17 @@ function Card:remove()
 	local re_card = self
 	local ret = original_remove(self)
 
-	SMODS.calculate_context({
-		dwjokers_removed = true,
-		dwjokers_removed_card = re_card
-	})
+	if not G.dwjokers_delete_run then
+		SMODS.calculate_context({
+			dwjokers_removed = true,
+			dwjokers_removed_card = re_card
+		})
+	end
 
 	return ret
 end	
 
--- Start_dissolve hook para prevenir que Jokers sean destruidos si tienes a Goob en un deck
+-- Start_dissolve hook para prevenir que Jokers sean destruidos si tienes a Goob en tu deck
 -- Mas un saved by goob context por si se ocupa
 local original_start_dissolve = Card.start_dissolve
 function Card:start_dissolve(dissolve_colours, silent, dissolve_time_fac, no_juice)
@@ -161,9 +182,10 @@ function Card:start_dissolve(dissolve_colours, silent, dissolve_time_fac, no_jui
     local goob_exists = next(SMODS.find_card("j_dwjokers_Goob"))
     local selling = self.being_sold
 	local selfdestructive = table_contains(self.config.center.key, selfdestruct_jokers)
+	local area = self.area
 
 
-	if is_joker and goob_exists and not selling and not selfdestructive then
+	if is_joker and area == G.jokers and goob_exists and not selling and not selfdestructive then
 		SMODS.calculate_context({ 
 			dwjokers_saved_by_goob = true, 
 			dwjokers_saved_by_goob_card = self })
@@ -202,7 +224,7 @@ function Card:sell_card()
 	return original_sell_card(self)
 end
 
--- Set edition con prediction activado, si es prediccion sera SILENT
+-- Set edition hook con prediction activado, si es prediccion sera SILENT
 local original_set_edition = Card.set_edition
 function Card:set_edition(edition, immediate, silent, delay)
 	if G.GAME.dwjokers_prediction_active then
@@ -214,7 +236,7 @@ function Card:set_edition(edition, immediate, silent, delay)
 	return ret
 end
 
--- Set seal con prediccion activado, si es prediccion sera SILENT
+-- Set seal hook con prediccion activado, si es prediccion sera SILENT
 local original_set_seal = Card.set_seal
 function Card:set_seal(_seal, silent, immediate)
 	if G.GAME.dwjokers_prediction_active then
@@ -226,7 +248,45 @@ function Card:set_seal(_seal, silent, immediate)
 	return ret
 end
 
+-- highlight hook para las mecanicas de bassie y vee
+local highlight_ref = Card.highlight
+function Card:highlight(is_highlighted)
+	
 
+		-- para la mecanica de la basket de bassie
+		if G.dwjokers_bassie_exists then
+			if is_highlighted and ((self.ability.set == "Joker" and self.area == G.jokers) or 
+				((self.ability.set == "Tarot" or self.ability.set == "Planet" or self.ability.set == "Spectral") and self.area == G.consumeables) or
+				((self.ability.set == "Default" or self.ability.set == "Enhanced") and self.area == G.hand)) then
+					if self.config.center.key == "j_dwjokers_Bassie" then
+						self.children.dwjokers_my_button = dwjokers_create_bassie_button_ui(self, {func = 'dwjokers_basket_button', text = "BASKET"})
+					else
+						self.children.dwjokers_my_button = dwjokers_create_bassie_button_ui(self, {func = 'dwjokers_save_button', text = "SAVE"})
+					end
+			elseif is_highlighted and self.ability.dwjokers_in_basket then
+				self.children.dwjokers_my_button = dwjokers_create_bassie_button_ui(self, {func = 'dwjokers_retrieve_button', text = "RETRIEVE"})
+				return self:highlight_custom_bassie(is_highlighted)
+			elseif self.children.dwjokers_my_button then
+				self.children.dwjokers_my_button:remove()
+				self.children.dwjokers_my_button = nil
+			end
+		end
+
+		-- para la mecanica del super menu de vee
+		if G.dwjokers_vee_exists then
+			if is_highlighted and self.config.center.key == "j_dwjokers_Vee" then
+				self.children.dwjokers_my_button_2 = dwjokers_create_vee_button_ui(self)
+			elseif self.children.dwjokers_my_button_2 then
+				self.children.dwjokers_my_button_2:remove()
+				self.children.dwjokers_my_button_2 = nil
+			end
+		end	
+
+  return highlight_ref(self, is_highlighted)
+end
+
+-- Draw from play to discard, si tienes a Scraps las scoring cards vuelven al deck
+-- CON TAL DE NO HACER UN PATCH XDDDDDD
 G.FUNCS.draw_from_play_to_discard = function(e)
     local play_count = #G.play.cards
     -- Verificamos si tienes el Joker "Scraps"
@@ -251,6 +311,9 @@ end
 ------------ CUSTOM FUNCTIONS --------------
 
 -- Para verificar si una tabla contiene un valor. Muy util :)
+-- value: valor a buscar en la tabla
+-- tbl: tabla de valores
+-- return: true si lo contiene, false si no
 function table_contains(value, tbl)
     for _, v in ipairs(tbl) do
         if v == value then
@@ -261,6 +324,8 @@ function table_contains(value, tbl)
 end
 
 -- Predecir contenido de booster pack. TREMENDO DOLOR DE CABEZA FUE HACER ESTO :S
+-- Card: booster pack a predecir
+-- return: tabla de cartas predichas
 function Card:simulate_open()
     if self.ability.set ~= "Booster" then return nil end
 
@@ -363,7 +428,9 @@ function Card:simulate_open()
     return predicted_results
 end
 
--- Imprimir predicciones de Card:simulate_open(). Se imprimen en consola.
+-- Imprimir predicciones de Card:simulate_open(). Se imprimen en consola. (DEBUG)
+-- t: tabla de cartas predichas por card:simulate_open()
+-- card: booster pack predicho
 function print_predictions(t, card)
 	print("")
 	print(card.config.center.name)
@@ -407,6 +474,9 @@ function print_predictions(t, card)
 	end	
 end
 
+-- Revisar si una carta es de toon
+-- Card: carta a revisar
+-- return: true si es toon, false si no.
 function Card:dwjokers_is_toon()
 	if self.config and self.config.center then
 		if (self.config.center.pools or {}).dwjokers_toons then
@@ -419,23 +489,120 @@ function Card:dwjokers_is_toon()
 	end				
 end	
 
+-- Aplicar bonus de Bobette. MUY MALA PRACTICA pero no se como hacerlo mejor :S
+-- ACTUALIZAR CADA QUE CAMBIE ALGO EN LOS TOONS. TREMENDO.
+-- card: carta a actualizar el bonus
+-- apply: true si se aplicara el bonus, tiene prioridad
+-- remove: true si se quitara el bonus
+function dwjokers_apply_bobette_bonus(card, apply, remove)
+    if not (card.config and card.config.center and card.config.center.key) then return end
+    
+	local key = card.config.center.key
+	-- Inicializamos el contador en 0 si no existe
+	card.ability.dwjokers_bobette_stacks = card.ability.dwjokers_bobette_stacks or 0
+	
+	local power = 0
 
------------- UI ---------------
+	if apply then
+		power = 1
+		card.ability.dwjokers_bobette_stacks = card.ability.dwjokers_bobette_stacks + 1
+	elseif remove then
+		-- Solo removemos si hay stacks para quitar
+		if card.ability.dwjokers_bobette_stacks > 0 then
+			power = -1
+			card.ability.dwjokers_bobette_stacks = card.ability.dwjokers_bobette_stacks - 1
+		else
+			return -- No hacemos nada si no tiene stacks
+		end
+	end 
 
--- GUARDAR EN LA dwjokers_bassie_basket
+	-- Usamos el bonus base (ej: 2)
+	-- NO multipliques esta variable global por la cantidad de Bobettes.
+	-- Deja que sea siempre 2 (o lo que diga la carta).
+	local base_bonus = G.dwjokers_bobette_bonus or 2 
+	
+	-- Si power es 1, multiplicamos por 2.
+	-- Si power es -1, multiplicamos por 0.5 (dividimos).
+	local multiplier = base_bonus ^ power
+
+
+	if key == "j_dwjokers_Boxten" then
+		card.ability.extra.mult_add = card.ability.extra.mult_add * multiplier
+		card.ability.extra.mult_stack = card.ability.extra.mult_stack * multiplier
+		
+	elseif key == "j_dwjokers_Poppy" then
+		card.ability.extra.chips_add = card.ability.extra.chips_add * multiplier
+		card.ability.extra.chips_stack = card.ability.extra.chips_stack * multiplier
+		
+	elseif key == "j_dwjokers_Shrimpo" then
+		card.ability.extra.mult = card.ability.extra.mult * multiplier
+		
+	elseif key == "j_dwjokers_Tisha" then
+		card.ability.extra.chips = card.ability.extra.chips * multiplier
+		card.ability.extra.chip_gain = card.ability.extra.chip_gain * multiplier
+		
+	elseif key == "j_dwjokers_Connie" then
+		card.ability.extra.mult = card.ability.extra.mult * multiplier
+		card.ability.extra.mult_stack = card.ability.extra.mult_stack * multiplier
+	
+	elseif key == "j_dwjokers_RazzlenDazzle" then
+		card.ability.extra.chips = card.ability.extra.chips * multiplier
+		card.ability.extra.mult = card.ability.extra.mult * multiplier
+		
+	elseif key == "j_dwjokers_Toodles" then
+		card.ability.extra.xmult = card.ability.extra.xmult * multiplier
+		
+	elseif key == "j_dwjokers_Flyte" then
+		card.ability.extra.chips_mult = card.ability.extra.chips_mult * multiplier
+		card.ability.extra.chips_to_give = card.ability.extra.chips_to_give * multiplier
+
+	elseif key == "j_dwjokers_Blot" then
+		card.ability.extra.mult_add = card.ability.extra.mult_add * multiplier
+		card.ability.extra.mult_stack = card.ability.extra.mult_stack * multiplier
+		
+	elseif key == "j_dwjokers_Flutter" then
+		card.ability.extra.xchips = card.ability.extra.xchips * multiplier
+		
+	elseif key == "j_dwjokers_Eclipse" then
+		card.ability.extra.xmult = card.ability.extra.xmult * multiplier
+		
+	elseif key == "j_dwjokers_Dyle" then
+		card.ability.extra.xmult_gain = card.ability.extra.xmult_gain * multiplier
+		card.ability.extra.xmult = card.ability.extra.xmult * multiplier
+		
+	elseif key == "j_dwjokers_Shelly" then
+		card.ability.extra.xmult_add = card.ability.extra.xmult_add * multiplier
+		card.ability.extra.xmult_stack = card.ability.extra.xmult_stack * multiplier
+		
+	else 
+		return
+	end
+end
+
+
+------------ UI PARA LA BASKET DE BASSIE ---------------
+
+-- GUARDAR EN LA BASKET DE BASSIE
 G.FUNCS.dwjokers_save_button = function(e)
 	local card = e.config.ref_table -- access the card this button was on
 	local area = card.area
-	card.original_area = area
-
+	card.original_area = area -- guardamos cardarea original, aqui se devolvera la carta
+	
+	-- removemos carta del area original y la asignamos a la basket de bassie
 	if card.config.center.key ~= "j_dwjokers_Bassie" then
 		if #G.dwjokers_bassie_basket.cards < G.dwjokers_bassie_basket.config.card_limit then
-			card:hard_set_T(nil, nil, card.T.w / 1.5, card.T.h / 1.5)
 			area:remove_card(card)
 			area:remove_from_highlighted(card)
 			card:set_card_area(G.dwjokers_bassie_basket)
 			card:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 2*G.SETTINGS.GAMESPEED)
-			G.dwjokers_bassie_basket:emplace(card, nil)
+			G.dwjokers_bassie_basket:emplace(card)
+			card.ability.dwjokers_in_basket = true
+
+			SMODS.calculate_context({ 
+				dwjokers_basket_modified = true, 
+				dwjokers_basket_card = card,
+			})
+
 		else
 			SMODS.calculate_effect({ message = "BASKET FULL!" }, card)
 		end
@@ -444,12 +611,14 @@ G.FUNCS.dwjokers_save_button = function(e)
 	end
 end
 
--- RECUPERAR DE LA dwjokers_bassie_basket
+-- RECUPERAR DE LA BASKET DE BASSIE
 G.FUNCS.dwjokers_retrieve_button = function(e)
 	local card = e.config.ref_table -- access the card this button was on
 	local area = {}
 	local set = card.ability.set
+	local area2 = card.area
 
+	-- asignamos el area a la que mandaremos la carta
 	if G.STATES.SMODS_BOOSTER_OPENED == G.STATE and (set == "Default" or set == "Enhanced") then
 		area = G.hand
 	elseif card.original_area and not (not G.GAME.blind.in_blind and card.original_area == G.hand) then
@@ -462,20 +631,48 @@ G.FUNCS.dwjokers_retrieve_button = function(e)
 		area = G.consumeables
 	end
 
+	-- usamos bassie_flag para identificar carta original en la basket de bassie
 	if #area.cards < area.config.card_limit or area == G.hand then	
-		card:hard_set_T(nil, nil, card.T.w * 1.5, card.T.h * 1.5)
-		G.dwjokers_bassie_basket:remove_card(card)
-		G.dwjokers_bassie_basket:remove_from_highlighted(card)
-		card:set_card_area(area)
-		card:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 2*G.SETTINGS.GAMESPEED)
-		area:emplace(card, nil)
+		for _, v in ipairs(G.dwjokers_bassie_basket.cards) do
+			if v.ability.bassie_flag == card.ability.bassie_flag then
+				G.dwjokers_bassie_basket:remove_card(v)
+				G.dwjokers_bassie_basket:remove_from_highlighted(v)
+				v:set_card_area(area)
+				v:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 2*G.SETTINGS.GAMESPEED)
+				area:emplace(v, nil)
+				break
+			end
+		end	
+		
+		-- si de alguna forma usaste retrieve en la carta original, no la destruye
+		if area2 ~= G.dwjokers_bassie_basket then
+			card:start_dissolve()
+		end
+
+		SMODS.calculate_context({ 
+				dwjokers_basket_modified = true, 
+				dwjokers_basket_card = card,
+			})
+
 	else
 		SMODS.calculate_effect({ message = "NOT ENOUGH SPACE!" }, card)
 	end
 end
 
--- BOTON PARA GUARDAR CARTAS
-local function dwjokers_create_save_button_ui(card)
+-- CREAR LA BASKET CON BASSIE
+G.FUNCS.dwjokers_basket_button = function(e)
+
+  G.FUNCS.overlay_menu{
+    definition = G.UIDEF.dwjokers_bassie_uibox(),
+	pause = false
+  }
+end
+
+-- BOTONES CREADOS POR BASSIE
+-- card: carta que llamo a la funcion
+-- button.func: funcion que llamara el boton creado (las 3 opciones arriba)
+-- button.text: texto del boton (decorativo, "SAVE", "RETRIEVE" y "BASKET")
+function dwjokers_create_bassie_button_ui(card, button)
   return UIBox({
     definition = {
       n = G.UIT.ROOT,
@@ -492,7 +689,7 @@ local function dwjokers_create_save_button_ui(card)
             hover = true,
             shadow = true,
             colour = G.C.CHIPS, -- color of the button background
-            button = 'dwjokers_save_button', -- function in G.FUNCS that will run when this button is clicked
+            button = button.func, -- function in G.FUNCS that will run when this button is clicked
             ref_table = card,
           },
           nodes = {
@@ -502,7 +699,7 @@ local function dwjokers_create_save_button_ui(card)
                 {
                   n = G.UIT.T,
                   config = {
-                    text = "SAVE",
+                    text = button.text,
                     colour = G.C.UI.TEXT_LIGHT, -- color of the button text,
                     scale = 0.4,
                   }
@@ -529,8 +726,102 @@ local function dwjokers_create_save_button_ui(card)
   })
 end
 
--- BOTON PARA RECUPERAR CARTAS
-local function dwjokers_create_retrieve_button_ui(card)
+-- drawstep for my_button
+SMODS.DrawStep {
+  key = 'my_button',
+  order = 100, -- before the Card is drawn
+  func = function(card, layer)
+    if card.children.dwjokers_my_button then
+      card.children.dwjokers_my_button:draw()
+    end
+  end
+}
+
+-- make sure SMODS doesn't draw the button after the card is drawn
+SMODS.draw_ignore_keys.dwjokers_my_button = true
+
+
+-- CREAR UI BASE DE LA BASKET DE BASSIE
+-- return: menu generico de opciones (da un boton de back muy util)
+function G.UIDEF.dwjokers_bassie_uibox()
+  return create_UIBox_generic_options({contents ={create_tabs(
+    {tabs = {
+          {
+            label = "BASSIE BASKET",
+            chosen = true,
+			tab_definition_function = G.UIDEF.dwjokers_bassie_uibox_tab_definition
+		  }
+    },
+    tab_h = 4,
+    snap_to_nav = true})}})
+end
+
+-- CREAR INTERIOR DE LA BASKET DE BASSIE
+-- return: nodos con un cardarea que copia la basket de bassie para renderizar
+function G.UIDEF.dwjokers_bassie_uibox_tab_definition()
+	-- creamos cardarea temporal donde copiaremos las cartas de la basket de bassie
+	local cardarea = CardArea(
+    2,2,
+    math.min(2*#G.dwjokers_bassie_basket.cards, 8*G.CARD_W),
+    0.75*G.CARD_H, 
+    {card_limit = #G.dwjokers_bassie_basket.cards, type = 'joker'})
+
+	-- copiamos las cartas de la basket al cardarea temporal
+	for i = 1, #G.dwjokers_bassie_basket.cards do
+		G.dwjokers_bassie_basket.cards[i].ability.bassie_flag = i
+		local new_card = copy_card(G.dwjokers_bassie_basket.cards[i], nil, nil, G.dwjokers_bassie_basket.cards[i].playing_card)
+		new_card.ability.bassie_flag = i
+		new_card.original_area = G.dwjokers_bassie_basket.cards[i].original_area -- copy_card no guarda este parametro por si mismo
+		cardarea:emplace(new_card)
+	end
+
+	return {n=G.UIT.ROOT, config={align = "cm", minw = 15, padding = 0.1, r = 0.1, colour = G.C.CLEAR}, nodes={
+				{n=G.UIT.R, config={align = "cm", colour = G.C.WHITE, r = 0.1}, nodes={
+				{n=G.UIT.C, config={align = "cm"}, nodes={
+				{n=G.UIT.O, config={object = cardarea}}
+			}}
+		}}
+	}}
+end
+
+-- Funcion highlight que no dibuja botones de USE ni SELL
+-- Card: carta que llamo a la funcion
+-- is_highlighted: si la carta esta seleccionada o no
+function Card:highlight_custom_bassie(is_higlighted)
+    self.highlighted = is_higlighted
+    if self.ability.consumeable or self.ability.set == 'Joker' or (self.area and self.area == G.pack_cards) then
+        if self.highlighted and self.area and self.area.config.type ~= 'shop' then
+        elseif self.children.use_button then
+            self.children.use_button:remove()
+            self.children.use_button = nil
+        end
+    end
+    if self.ability.consumeable or self.ability.set == 'Joker' then
+        if not self.highlighted and self.area and self.area.config.type == 'joker' and
+            (#G.jokers.cards >= G.jokers.config.card_limit or (self.edition and self.edition.negative)) then
+                if G.shop_jokers then G.shop_jokers:unhighlight_all() end
+        end
+    end
+end
+
+
+------------ UI PARA EL SUPER MENU DE Vee ---------------
+
+
+-- CREAR EL MENU CON VEE
+G.FUNCS.dwjokers_vee_menu_button = function(e)
+    -- Guardamos la referencia de la carta que estamos editando
+    G.dwjokers_editing_vee = e.config.ref_table 
+    
+    G.SETTINGS.paused = true
+    G.FUNCS.overlay_menu{
+        definition = G.UIDEF.dwjokers_vee_uibox(),
+    }
+end
+
+-- BOTONES CREADOS POR VEE
+-- card: carta que llamo a la funcion
+function dwjokers_create_vee_button_ui(card)
   return UIBox({
     definition = {
       n = G.UIT.ROOT,
@@ -546,8 +837,8 @@ local function dwjokers_create_retrieve_button_ui(card)
             r = 0.08,
             hover = true,
             shadow = true,
-            colour = G.C.CHIPS, -- color of the button background
-            button = 'dwjokers_retrieve_button', -- function in G.FUNCS that will run when this button is clicked
+            colour = G.C.SUITS.Clubs, -- color of the button background
+            button = 'dwjokers_vee_menu_button', -- function in G.FUNCS that will run when this button is clicked
             ref_table = card,
           },
           nodes = {
@@ -557,7 +848,7 @@ local function dwjokers_create_retrieve_button_ui(card)
                 {
                   n = G.UIT.T,
                   config = {
-                    text = "RETRIEVE",
+                    text = "SUPER MENU",
                     colour = G.C.UI.TEXT_LIGHT, -- color of the button text,
                     scale = 0.4,
                   }
@@ -584,38 +875,251 @@ local function dwjokers_create_retrieve_button_ui(card)
   })
 end
 
--- highlight hook para el boton de save y retrieve de Bassie
-local highlight_ref = Card.highlight
-function Card:highlight(is_highlighted)
-	local bassie_exists = next(SMODS.find_card("j_dwjokers_Bassie"))
-
-		if bassie_exists and is_highlighted and ((self.ability.set == "Joker" and self.area == G.jokers) or 
-			((self.ability.set == "Tarot" or self.ability.set == "Planet" or self.ability.set == "Spectral") and self.area == G.consumeables) or
-			((self.ability.set == "Default" or self.ability.set == "Enhanced") and self.area == G.hand)) then
-			self.children.dwjokers_my_button = dwjokers_create_save_button_ui(self)
-		elseif is_highlighted and self.area == G.dwjokers_bassie_basket then
-			self.children.dwjokers_my_button = dwjokers_create_retrieve_button_ui(self)
-		elseif self.children.dwjokers_my_button then
-			self.children.dwjokers_my_button:remove()
-			self.children.dwjokers_my_button = nil
-		end
-
-  return highlight_ref(self, is_highlighted)
-end
-
--- drawstep for my_button
+-- drawstep for my_button_2
 SMODS.DrawStep {
-  key = 'my_button',
+  key = 'my_button_2',
   order = 100, -- before the Card is drawn
   func = function(card, layer)
-    if card.children.dwjokers_my_button then
-      card.children.dwjokers_my_button:draw()
+    if card.children.dwjokers_my_button_2 then
+      card.children.dwjokers_my_button_2:draw()
     end
   end
 }
 
 -- make sure SMODS doesn't draw the button after the card is drawn
-SMODS.draw_ignore_keys.dwjokers_my_button = true
+SMODS.draw_ignore_keys.dwjokers_my_button_2 = true
+
+
+-- CREAR UI BASE DEL MENU DE VEE
+-- return: menu generico de opciones (da un boton de back muy util)
+function G.UIDEF.dwjokers_vee_uibox()
+  return create_UIBox_generic_options({
+    colour = HEX("041400"), 
+    outline_colour = HEX("25B800"),
+    contents ={create_tabs({
+        colour = HEX("25B800"),
+        tabs = {
+            -- Super menu ajua
+            {
+                label = "VEE'S SUPER MENU",
+                chosen = true,
+                tab_definition_function = G.UIDEF.dwjokers_vee_uibox_tab_definition
+            },
+            -- Stats
+            {
+                label = "CURRENT BONUSES",
+                chosen = false,
+                tab_definition_function = G.UIDEF.dwjokers_vee_stats_tab_definition
+            }
+        },
+        tab_h = 4,
+        scale = 1.5, -- Ajusté un poco la escala, 2 a veces es muy grande para dos pestañas
+        snap_to_nav = true
+    })}
+  })
+end
+
+-- CREAR INTERIOR DEL SUPER MENU DE VEE
+-- return: nodos con el super menu de Vee, una tortura de nodear pues JAJ muchos nodos arre
+function G.UIDEF.dwjokers_vee_uibox_tab_definition()
+
+    -- Función auxiliar para no repetir código y envolver cada toggle en una fila
+    local function wrap_toggle(args)
+        return {n=G.UIT.R, config={align = "lc", padding = 0.05}, nodes={
+            create_toggle(args)
+        }}
+    end
+
+    -- Primer columna
+    local col_1 = {
+        wrap_toggle({label = "+1 Hands", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_hands", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
+        wrap_toggle({label = "+1 Discards", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_discards", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
+        wrap_toggle({label = "+1 Hand size", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_handsize", active_colour = HEX("25B800"), inactive_colour = HEX("041400")})
+    }
+
+    -- Segunda columna
+    local col_2 = {
+        wrap_toggle({label = "+1 Joker spaces", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_jokers", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
+        wrap_toggle({label = "+1 Consumable spaces", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_consumables", active_colour = HEX("25B800"), inactive_colour = HEX("041400")})
+    }
+
+    -- Tercer columna
+    local col_3 = {
+        wrap_toggle({label = "+1 card slot in shop", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_cardslots", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
+        wrap_toggle({label = "+1 voucher slots in shop", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_vouchers", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}),
+        wrap_toggle({label = "+1 booster pack slots in shop", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_boosters", active_colour = HEX("25B800"), inactive_colour = HEX("041400")})
+    }
+
+    return {n=G.UIT.ROOT, config={align = "tl", minw = 15, padding = 0.1, colour = G.C.CLEAR}, nodes={
+        {n=G.UIT.R, config={align = "tm", colour = G.C.CLEAR}, nodes={
+            {n=G.UIT.C, config={align = "lc", minw = 5, padding = 0.2}, nodes = col_1},
+            {n=G.UIT.C, config={align = "lc", minw = 5, padding = 0.2}, nodes = col_2},
+            {n=G.UIT.C, config={align = "lc", minw = 5, padding = 0.2}, nodes = col_3}
+        }}
+    }}
+end
+
+-- CREAR TAB DE STATS DEL SUPER MENU DE VEE
+-- return: nodos con stats de los bonus ya aplicados. SI EL ANTERIOR FUE TORTURA ESTE MAS JAJAJAAJ
+function G.UIDEF.dwjokers_vee_stats_tab_definition()
+    local card = G.dwjokers_editing_vee
+    local nodes = {}
+    
+    -- Si por alguna razón la carta no existe, mostramos error (seguridad)
+    if not card or not card.ability or not card.ability.extra then
+        return {n=G.UIT.R, config={align = "cm"}, nodes={{n=G.UIT.T, config={text = "Error: Card not found", scale = 0.5, colour = G.C.RED}}}}
+    end
+
+    local upgrades = card.ability.extra.total_upgrades or {}
+    
+    -- Mapeo para nombres bonitos en la UI
+    local display_names = {
+        hands = "Hands Played",
+        discards = "Discards",
+        hand_size = "Hand Size",
+        jokers = "Joker Slots",
+        consumables = "Consumable Slots",
+        cardslots = "Shop Card Slots",
+        vouchers = "Shop Voucher Slots",
+        boosters = "Booster Pack Slots"
+    }
+
+    local found_any = false
+
+    -- Iteramos por los upgrades y creamos una fila para cada uno que sea > 0
+    for k, v in pairs(upgrades) do
+        if v > 0 then
+            found_any = true
+            local name = display_names[k] or k -- Usamos el nombre bonito o la llave si falla
+            
+            table.insert(nodes, {
+                n=G.UIT.R, config={align = "cm", padding = 0.05}, nodes={
+                    {n=G.UIT.C, config={align = "cr", minw = 2.5}, nodes={
+                        {n=G.UIT.T, config={text = name..": ", scale = 0.45, colour = G.C.UI.TEXT_LIGHT}}
+                    }},
+                    {n=G.UIT.C, config={align = "cl", minw = 1}, nodes={
+                        {n=G.UIT.T, config={text = "+"..v, scale = 0.45, colour = G.C.GREEN}}
+                    }}
+                }
+            })
+        end
+    end
+
+    -- Si no tiene mejoras, mostramos un mensaje
+    if not found_any then
+        table.insert(nodes, {
+            n=G.UIT.R, config={align = "cm", padding = 0.2}, nodes={
+                {n=G.UIT.T, config={text = "Ahem. . . is it working?", scale = 0.4, colour = G.C.UI.TEXT_INACTIVE}}
+            }
+        })
+    end
+
+    -- Retornamos la estructura completa
+    return {n=G.UIT.ROOT, config={align = "cm", minw = 6, padding = 0.1, colour = G.C.CLEAR}, nodes={
+        {n=G.UIT.C, config={align = "cm", padding = 0.1}, nodes = nodes}
+    }}
+end
+
+-- APLICAR BONUS DEL SUPER MENU DE VEE
+-- card: carta que llamo a la funcion
+-- mode: "apply" para aplicar bonus, "remove" para remover todos los bonus, 
+-- 		 "re-apply" para aplicar bonus en caso de copia. (default: "apply")
+-- return: nada si card no es Vee
+function dwjokers_vee_bonus(card, mode)
+
+    -- 1. Solo aplica si la carta es Vee
+    if card.config.center.key ~= "j_dwjokers_Vee" then return end
+
+    mode = mode or "apply"
+    local extra = card.ability.extra
+    local upgrades = extra.upgrades or 1
+
+    -- 2. Definimos las acciones 
+    local actions = {
+        dwjokers_vee_hands = {
+            func = function(amt) 
+                G.GAME.round_resets.hands = G.GAME.round_resets.hands + amt
+                ease_hands_played(amt)
+            end,
+            stat = "hands", msg = "Hands"
+        },
+        dwjokers_vee_discards = {
+            func = function(amt) 
+                G.GAME.round_resets.discards = G.GAME.round_resets.discards + amt
+                ease_discard(amt)
+            end,
+            stat = "discards", msg = "Discards"
+        },
+        dwjokers_vee_handsize = {
+            func = function(amt) G.hand:change_size(amt) end,
+            stat = "hand_size", msg = "Hand Size"
+        },
+        dwjokers_vee_jokers = {
+            func = function(amt) G.jokers:change_size(amt) end,
+            stat = "jokers", msg = "Joker Slots"
+        },
+        dwjokers_vee_consumables = {
+            func = function(amt) G.consumeables:change_size(amt) end,
+            stat = "consumables", msg = "Consumable Slots"
+        },
+        dwjokers_vee_cardslots = {
+            func = function(amt) change_shop_size(amt) end,
+            stat = "cardslots", msg = "Shop Slots"
+        },
+        dwjokers_vee_boosters = {
+            func = function(amt) SMODS.change_booster_limit(amt) end,
+            stat = "boosters", msg = "Booster Slots"
+        },
+        dwjokers_vee_vouchers = {
+            func = function(amt) SMODS.change_voucher_limit(amt) end,
+            stat = "vouchers", msg = "Voucher Slots"
+        }
+    }
+
+    if mode == "apply" then
+        -- LÓGICA DE APLICAR (Uno al azar)
+        local vee_keys = {"dwjokers_vee_hands", "dwjokers_vee_discards", "dwjokers_vee_handsize", "dwjokers_vee_jokers", "dwjokers_vee_consumables", "dwjokers_vee_cardslots", "dwjokers_vee_vouchers", "dwjokers_vee_boosters"}
+        local vee_active_settings = {}
+        for _, key in ipairs(vee_keys) do
+            if G.SETTINGS[key] then table.insert(vee_active_settings, key) end
+        end
+
+        local chosen_key = #vee_active_settings > 0 
+            and pseudorandom_element(vee_active_settings, 'dwjokers_vee') 
+            or pseudorandom_element(vee_keys, 'dwjokers_vee')
+
+        local action = actions[chosen_key]
+        if action then
+            action.func(upgrades)
+            extra.total_upgrades[action.stat] = (extra.total_upgrades[action.stat] or 0) + upgrades
+            SMODS.calculate_effect({ message = "+" .. upgrades .. " " .. action.msg .. "!", colour = G.C.GREEN }, card)
+        end
+
+    elseif mode == "remove" then
+        -- LÓGICA DE REMOVER (Todo lo acumulado)
+        for _, action in pairs(actions) do
+            local total = extra.total_upgrades[action.stat] or 0
+            if total > 0 then
+                action.func(-total)
+				SMODS.calculate_effect({ message = "-" .. total .. " " .. action.msg .. "!", colour = G.C.RED }, card)
+            end
+        end
+
+    elseif mode == "re-apply" then
+        -- NUEVA LÓGICA: RE-APLICAR (Para copias)
+        local applied_any = false
+        for _, action in pairs(actions) do
+            local total = extra.total_upgrades[action.stat] or 0
+            if total > 0 then
+                action.func(total)
+                applied_any = true
+            end
+        end
+        if applied_any then
+            SMODS.calculate_effect({ message = "Copy Bonuses Applied!", colour = G.C.BLUE }, card)
+        end
+    end
+end
 
 ------------ ATLAS --------------
 
@@ -642,6 +1146,37 @@ SMODS.Atlas{
     px = 71, --width of one card
     py = 95 -- height of one card
 }
+
+-- Vintage edition (aun no hace nada)
+SMODS.Edition({
+    key = "vintage",
+    loc_txt = {
+        name = "Vintage",
+        label = "Vintage",
+        text = {
+           "WIP"
+        }
+    },
+
+    shader = "greyscale",
+    discovered = true,
+    unlocked = true,
+    config = { },
+    in_shop = true,
+    weight = 8,
+    extra_cost = 6,
+    apply_to_float = true,
+    loc_vars = function(self)
+        return { }
+    end
+})
+SMODS.Shader({ key = 'greyscale', path = 'greyscale.fs' })
+
+-- Retrigger joker optional feature
+SMODS.current_mod.optional_features = function()
+    return { retrigger_joker = true }
+end
+
 
 
 ------------ JOKERS --------------
@@ -682,7 +1217,7 @@ SMODS.Joker {
 				card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
 			end	
 		end
-		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
 			for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 				if (joker.config.center.pools or {}).dwjokers_toons then
 					card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
@@ -698,7 +1233,7 @@ SMODS.Joker {
 					card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
 				end	
 			end
-			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
 				for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 					if (joker.config.center.pools or {}).dwjokers_toons then
 						card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
@@ -716,7 +1251,7 @@ SMODS.Joker {
 							card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
 						end	
 					end
-					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
 						for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 							if (joker.config.center.pools or {}).dwjokers_toons then
 								card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
@@ -772,7 +1307,7 @@ SMODS.Joker {
 				card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
 			end	
 		end
-		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
 			for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 				if (joker.config.center.pools or {}).dwjokers_toons then
 					card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
@@ -788,7 +1323,7 @@ SMODS.Joker {
 					card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
 				end	
 			end
-			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
 				for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 					if (joker.config.center.pools or {}).dwjokers_toons then
 						card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
@@ -806,7 +1341,7 @@ SMODS.Joker {
 							card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
 						end	
 					end
-					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
 						for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 							if (joker.config.center.pools or {}).dwjokers_toons then
 								card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
@@ -1125,13 +1660,18 @@ SMODS.Joker {
 	end
 }
 
--- Rudie (WIP)
+-- Rudie
 SMODS.Joker {
 	key = 'Rudie',
 	loc_txt = {
 		name = 'Rudie',
 		text = {
-			"WIP"
+			"Increase your {C:attention}Play{}",
+			"and {C:attention}Discard{} limit",
+			"by {C:attention}+#1#{} cards if the",
+			"{C:attention}ranks{} of scoring",
+			"cards sum {C:attention}#2#{}.",
+			"{C:inactive}(Currently {C:attention}+#3#{C:inactive} cards)"
 		}
 	},
 	unlocked = true, 
@@ -1143,18 +1683,39 @@ SMODS.Joker {
 	atlas = 'Jokers',
 	pos = { x = 4, y = 4 },
 	cost = 5,
-	config = { extra = {} },
+	config = { extra = { limit = 1, rank_sum = 25, limit_stack = 0 } },
 	loc_vars = function(self, info_queue, card)
-		return { vars = {} }
+		return { vars = { card.ability.extra.limit, card.ability.extra.rank_sum, card.ability.extra.limit_stack } }
 	end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
-	add_to_deck = function(self, card, from_debuff)
+	remove_from_deck = function(self, card, from_debuff)
+		SMODS.change_play_limit(-card.ability.extra.limit_stack)
+		SMODS.change_discard_limit(-card.ability.extra.limit_stack)
 	end,
-    calculate = function(self, card, context)
+	calculate = function(self, card, context)
 		
+		if context.after then 
+			local rank_total = 0
+			for _, v in ipairs(context.scoring_hand) do
+				rank_total = rank_total + (SMODS.has_no_rank(v) and 0 or v.base.nominal)
+			end
+			
+			if rank_total == card.ability.extra.rank_sum then
+				SMODS.change_play_limit(card.ability.extra.limit)
+				SMODS.change_discard_limit(card.ability.extra.limit)
+				card.ability.extra.limit_stack = card.ability.extra.limit_stack + card.ability.extra.limit
+				return { 
+				message = 'MERRY CHRISTMAS!',
+				colour = G.C.RED,
+				card = card}
+			end	
+		end	
+	
 	end
+
+
 }
 
 -- Eggson
@@ -1271,27 +1832,32 @@ SMODS.Joker {
     end,
 }
 
--- Connie (WIP)
+-- Connie
 SMODS.Joker {
 	key = 'Connie',
 	loc_txt = {
 		name = 'Connie',
 		text = {
-			"WIP"
+			"Destroys {C:attention}#1#{} random {C:attention}playing",
+			"{C:attention}card{} of each played",
+			"hand and permanently adds",
+			"{X:chips,C:white}X#2#{} its Chips to Mult",
+			"before each hand.",
+			"{C:inactive}(Currently {C:mult}+#3#{C:inactive} Mult)"
 		}
 	},
 	unlocked = true, 
 	discovered = true,
-	blueprint_compat = false,
+	blueprint_compat = true,
 	perishable_compat = true,
 	eternal_compat = true,
 	rarity = 2,
 	atlas = 'Jokers',
 	pos = { x = 5, y = 2 },
 	cost = 7,
-	config = { extra = {} },
+	config = { extra = {card_num = 1, mult = 1.5, mult_stack = 0} },
 	loc_vars = function(self, info_queue, card)
-		return { vars = {} }
+		return { vars = {card.ability.extra.card_num, card.ability.extra.mult, card.ability.extra.mult_stack} }
 	end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
@@ -1299,39 +1865,136 @@ SMODS.Joker {
 	add_to_deck = function(self, card, from_debuff)
 	end,
     calculate = function(self, card, context)
-		
+
+		if context.before and not context.blueprint then
+			local eligible_cards = {}
+			for k, v in ipairs(context.full_hand) do
+				if not v.getting_sliced and not v.removed then
+					table.insert(eligible_cards, v)
+				end
+			end
+
+			if #eligible_cards > 0 then
+				local random_card, index = pseudorandom_element(eligible_cards, "dwjokers_Connie")
+				random_card.getting_sliced = true 
+
+				local chips_from_card = (not SMODS.has_no_rank(random_card) and random_card.base.nominal or 0) + 
+										(random_card.ability.perma_bonus or 0) + 
+										(random_card.edition and (random_card.edition.chips or 0) or 0) + 
+										(random_card.ability.bonus or 0)
+				
+				card.ability.extra.mult_stack = card.ability.extra.mult_stack + (chips_from_card * card.ability.extra.mult)
+
+				random_card.removed = true
+				G.play:remove_card(random_card)
+				SMODS.calculate_effect({ message = localize { type = 'variable', key = 'a_mult', vars = { chips_from_card } }}, card)
+				random_card:start_dissolve()
+				
+			end
+		end
+
+		if context.initial_scoring_step then
+			if card.ability.extra.mult_stack > 0 then
+				return {
+					mult = card.ability.extra.mult_stack,
+					card = card
+				}
+			end
+		end
+
 	end
 }
 
--- Finn (WIP)
+-- Finn
 SMODS.Joker {
 	key = 'Finn',
 	loc_txt = {
 		name = 'Finn',
 		text = {
-			"WIP"
+			"Rettriger {C:attention}all{} played cards",
+			"used in scoring",
+			"{C:attention}+#1#{} times for each",
+			"{X:edition}Toon{} in your possesion",
+			"{C:inactive}(Currently {C:attention}+#2#{C:inactive} times)"
 		}
 	},
 	unlocked = true, 
 	discovered = true,
-	blueprint_compat = false,
+	blueprint_compat = true,
 	perishable_compat = true,
 	eternal_compat = true,
 	rarity = 2,
 	atlas = 'Jokers',
 	pos = { x = 0, y = 3 },
 	cost = 7,
-	config = { extra = {} },
+	config = { extra = { rep = 1, rep_stack = 0 } },
 	loc_vars = function(self, info_queue, card)
-		return { vars = {} }
+		return { vars = { card.ability.extra.rep, card.ability.extra.rep_stack } }
 	end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
 	add_to_deck = function(self, card, from_debuff)
+		card.ability.extra.rep_stack = 0
+		for _, joker in ipairs(G.jokers.cards) do
+			if (joker.config.center.pools or {}).dwjokers_toons then
+				card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
+			end	
+		end
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+			for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
+				if (joker.config.center.pools or {}).dwjokers_toons then
+					card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
+				end
+			end
+		end
 	end,
     calculate = function(self, card, context)
-		
+		if context.setting_blind and not context.blueprint then
+			card.ability.extra.rep_stack = 0
+			for _, joker in ipairs(G.jokers.cards) do
+				if (joker.config.center.pools or {}).dwjokers_toons then
+					card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
+				end	
+			end
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+				for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
+					if (joker.config.center.pools or {}).dwjokers_toons then
+						card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
+					end
+				end
+			end	
+		end
+
+		if context.card_added or (context.dwjokers_removed and context.dwjokers_removed_card.ability.set == "Joker") and not context.blueprint then
+			G.E_MANAGER:add_event(Event({
+				func = function()
+					card.ability.extra.rep_stack = 0
+					for _, joker in ipairs(G.jokers.cards) do
+						if (joker.config.center.pools or {}).dwjokers_toons then
+							card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
+						end	
+					end
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+						for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
+							if (joker.config.center.pools or {}).dwjokers_toons then
+								card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
+							end	
+						end	
+					end
+					return true
+				end,
+				blocking = false
+			}))
+		end
+
+		if context.repetition and context.cardarea == G.play then
+			return {
+				repetitions = card.ability.extra.rep_stack
+			}
+		end	
+
+
 	end
 }
 
@@ -1364,24 +2027,24 @@ SMODS.Joker {
  	end,
 	add_to_deck = function(self, card, from_debuff)
 		if G.GAME.round % 2 == 1 then
-				card.ability.extra.currently1 = 1000
+				card.ability.extra.currently1 = card.ability.extra.chips
 				card.ability.extra.currently2 = "Chips"
 			else
-				card.ability.extra.currently1 = 100
+				card.ability.extra.currently1 = card.ability.extra.mult
 				card.ability.extra.currently2 = "Mult"
 			end
 	end,
 	calculate = function(self, card, context)
 		if context.joker_main then
 			if G.GAME.round % 2 == 1 then
-				card.ability.extra.currently1 = 1000
+				card.ability.extra.currently1 = card.ability.extra.chips
 				card.ability.extra.currently2 = "Chips"
 				return {
 					chip_mod = card.ability.extra.chips,
 					message = localize { type = 'variable', key = 'a_chips', vars = { card.ability.extra.chips } }
 				}
 			else
-				card.ability.extra.currently1 = 100
+				card.ability.extra.currently1 = card.ability.extra.mult
 				card.ability.extra.currently2 = "Mult"
 				return {
 					mult_mod = card.ability.extra.mult,
@@ -1392,14 +2055,14 @@ SMODS.Joker {
 
 		if context.setting_blind then
 			if G.GAME.round % 2 == 1 then
-				card.ability.extra.currently1 = 1000
+				card.ability.extra.currently1 = card.ability.extra.chips
 				card.ability.extra.currently2 = "Chips"
 				return {
 					message = 'Oh what fun!',
 					colour = G.C.CHIPS
 				}
 			else
-				card.ability.extra.currently1 = 100
+				card.ability.extra.currently1 = card.ability.extra.mult
 				card.ability.extra.currently2 = "Mult"
 				return {
 					message = 'Oh the misery...',
@@ -1616,35 +2279,84 @@ SMODS.Joker {
 	end
 }
 
--- Flyte (WIP)
+-- Flyte
 SMODS.Joker {
 	key = 'Flyte',
 	loc_txt = {
 		name = 'Flyte',
 		text = {
-			"WIP"
+			"Adds {X:chips,C:white}X#1#{} the sum of",
+			"the chips of each card",
+			"{C:attention}held in hand.",
+			"{C:inactive}(Will give {C:chips}+#2#{C:inactive} Chips)"
 		}
 	},
 	unlocked = true, 
 	discovered = true,
-	blueprint_compat = false,
+	blueprint_compat = true,
 	perishable_compat = true,
 	eternal_compat = true,
 	rarity = 2,
 	atlas = 'Jokers',
 	pos = { x = 1, y = 3 },
 	cost = 7,
-	config = { extra = {} },
+	config = { extra = {chips_mult = 10, chips_to_give = 0} },
 	loc_vars = function(self, info_queue, card)
-		return { vars = {} }
+		return { vars = {card.ability.extra.chips_mult, card.ability.extra.chips_to_give} }
 	end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
-	add_to_deck = function(self, card, from_debuff)
-	end,
     calculate = function(self, card, context)
 		
+		if context.joker_main then
+			local chips_sum = 0
+			
+			for _, h_card in ipairs(G.hand.cards) do
+				local chips_from_card = (h_card.base.nominal or 0) + 
+					(h_card.ability.perma_bonus or 0) + 
+					(h_card.edition and (h_card.edition.chips or 0) or 0) + 
+					(h_card.ability.bonus or 0)
+				chips_sum = chips_sum + chips_from_card
+			end
+			
+			card.ability.extra.chips_to_give = chips_sum * card.ability.extra.chips_mult
+			return {
+				chip_mod = card.ability.extra.chips_to_give,
+				message = localize { type = 'variable', key = 'a_chips', vars = { card.ability.extra.chips_to_give } }
+			}
+		end	
+
+		if context.modify_scoring_hand and not context.blueprint then
+			local chips_sum = 0
+			
+			for _, h_card in ipairs(G.hand.cards) do
+				local is_scoring = false
+				
+				-- Comprobamos si ESTA carta de la mano está en la jugada que va a puntuar
+				for _, s_card in ipairs(context.full_hand) do
+					if h_card == s_card then 
+						is_scoring = true
+						break 
+					end
+				end
+
+				-- Si la carta NO va a puntuar (se queda en la mano)
+				if not is_scoring then
+					-- Sumamos (usamos nominal para el valor facial y perma_bonus para bonos de cartas)
+					-- Añadimos "or 0" por seguridad para evitar errores nil
+					local chips_from_card = (h_card.base.nominal or 0) + 
+						(h_card.ability.perma_bonus or 0) + 
+						(h_card.edition and (h_card.edition.chips or 0) or 0) + 
+						(h_card.ability.bonus or 0)
+					chips_sum = chips_sum + chips_from_card
+				end
+			end
+			
+			-- Guardamos el resultado final multiplicado
+			card.ability.extra.chips_to_give = chips_sum * card.ability.extra.chips_mult
+		end
+
 	end
 }
 
@@ -1747,8 +2459,17 @@ SMODS.Joker {
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
 	add_to_deck = function(self, card, from_debuff)
+		local bassie_consumables = 0
+		if G.dwjokers_bassie_exists then
+			for _,v in ipairs(G.dwjokers_bassie_basket.cards) do
+				if table_contains(v.ability.set, card_types) then
+					bassie_consumables = bassie_consumables + 1
+				end	
+			end	
+		end	
+
 		card.ability.extra.diff = #G.consumeables.cards - card.ability.extra.hand_stack
-		card.ability.extra.hand_stack = #G.consumeables.cards + #G.dwjokers_bassie_basket.cards
+		card.ability.extra.hand_stack = #G.consumeables.cards + bassie_consumables
 		card.ability.extra.mult_stack = G.hand.config.card_limit * card.ability.extra.mult_add
 		G.GAME.current_round.hands_left = G.GAME.current_round.hands_left + card.ability.extra.diff
 	end,
@@ -1758,7 +2479,16 @@ SMODS.Joker {
     calculate = function(self, card, context)
 
 		if context.setting_blind and not context.blueprint then
-			card.ability.extra.hand_stack = #G.consumeables.cards + #G.dwjokers_bassie_basket.cards
+			local bassie_consumables = 0
+			if G.dwjokers_bassie_exists then
+				for _,v in ipairs(G.dwjokers_bassie_basket.cards) do
+					if table_contains(v.ability.set, card_types) then
+						bassie_consumables = bassie_consumables + 1
+					end	
+				end	
+			end	
+
+			card.ability.extra.hand_stack = #G.consumeables.cards + bassie_consumables
 			card.ability.extra.mult_stack = G.hand.config.card_limit * card.ability.extra.mult_add
 			G.GAME.current_round.hands_left = G.GAME.current_round.hands_left + card.ability.extra.hand_stack
 		end
@@ -1766,8 +2496,17 @@ SMODS.Joker {
 		if context.card_added or (context.dwjokers_removed and table_contains(context.dwjokers_removed_card.ability.set, card_types)) and not context.blueprint then
 			G.E_MANAGER:add_event(Event({
 				func = function()
+					local bassie_consumables = 0
+					if G.dwjokers_bassie_exists then
+						for _,v in ipairs(G.dwjokers_bassie_basket.cards) do
+							if table_contains(v.ability.set, card_types) then
+								bassie_consumables = bassie_consumables + 1
+							end	
+						end	
+					end	
+
 					card.ability.extra.diff = #G.consumeables.cards - card.ability.extra.hand_stack
-					card.ability.extra.hand_stack = #G.consumeables.cards + #G.dwjokers_bassie_basket.cards
+					card.ability.extra.hand_stack = #G.consumeables.cards + bassie_consumables
 					G.GAME.current_round.hands_left = G.GAME.current_round.hands_left + card.ability.extra.diff
 					return true
 				end,
@@ -1879,13 +2618,15 @@ SMODS.Joker {
 	end	
 }
 
--- Glisten (WIP)
+-- Glisten
 SMODS.Joker {
 	key = 'Glisten',
 	loc_txt = {
 		name = 'Glisten',
 		text = {
-			"WIP"
+			"Swaps current {C:chips}Chips{}",
+			"and {C:mult}Mult{} values with",
+			"each other."
 		}
 	},
 	unlocked = true, 
@@ -1904,10 +2645,19 @@ SMODS.Joker {
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
-	add_to_deck = function(self, card, from_debuff)
+	set_ability = function(self, card, initial, delay_sprites)
+		card:set_edition("e_holo")
 	end,
     calculate = function(self, card, context)
 		
+		if context.joker_main then
+			return {swap = true, no_retrigger = true,
+				message = "Looking good!",
+				colour = G.C.PINK,
+				card = card
+			}
+		end
+
 	end
 }
 
@@ -2017,6 +2767,9 @@ SMODS.Joker {
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
+	remove_from_deck = function(self, card, from_debuff)
+		G.dwjokers_prediction_area.cards = {}
+	end,	
 	calculate = function(self, card, context)
 		
 		if context.dwjokers_hovered and not context.open_booster and 
@@ -2035,18 +2788,22 @@ SMODS.Joker {
 			G.dwjokers_prediction_area.cards = {}
 		end	
 
+		if context.buying_card then
+			G.dwjokers_prediction_area.cards = {}
+		end	
+
 		
 	end
-
 }
 
--- Cocoa (WIP)
+-- Cocoa
 SMODS.Joker {
 	key = 'Cocoa',
 	loc_txt = {
 		name = 'Cocoa',
 		text = {
-			"WIP"
+			"Retriggers all {X:edition}Toons{}",
+			"during {C:attention}joker scoring{}."
 		}
 	},
 	unlocked = true, 
@@ -2066,9 +2823,17 @@ SMODS.Joker {
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
 	add_to_deck = function(self, card, from_debuff)
+		
 	end,
     calculate = function(self, card, context)
 		
+		if context.retrigger_joker_check and context.other_context.joker_main then
+			if context.other_card:dwjokers_is_toon() then
+				return { repetitions = 1 }
+			end	
+		end
+
+
 	end
 }
 
@@ -2423,7 +3188,7 @@ SMODS.Joker {
 				card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
 			end	
 		end
-		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
 			for _, joker in ipairs(G.dwjokers_bassie_basket) do
 				if (joker.config.center.pools or {}).dwjokers_toons then
 					card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
@@ -2439,7 +3204,7 @@ SMODS.Joker {
 					card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
 				end	
 			end
-			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
 				for _, joker in ipairs(G.dwjokers_bassie_basket) do
 					if (joker.config.center.pools or {}).dwjokers_toons then
 						card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
@@ -2457,7 +3222,7 @@ SMODS.Joker {
 							card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
 						end	
 					end
-					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
 						for _, joker in ipairs(G.dwjokers_bassie_basket) do
 							if (joker.config.center.pools or {}).dwjokers_toons then
 								card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
@@ -2523,13 +3288,17 @@ SMODS.Joker {
 	end
 }
 
--- Vee (WIP)
+-- Vee
 SMODS.Joker {
 	key = 'Vee',
 	loc_txt = {
 		name = 'Vee',
 		text = {
-			"WIP"
+			"Unlock {C:green}VEE'S SUPER MENU",
+			"to add {C:attention}+#1#{} random permanent",
+			"upgrade between the",
+			"selected ones while you have",
+			"this {X:edition}Toon{} in your possesion."
 		}
 	},
 	unlocked = true, 
@@ -2542,29 +3311,55 @@ SMODS.Joker {
 	pos = { x = 1, y = 2 },
 	soul_pos = { x = 1, y = 3 },
 	cost = 20,
-	config = { extra = { } },
+	config = { extra = { upgrades = 1, 
+		total_upgrades = {
+			hands = 0,
+			discards = 0,
+			hand_size = 0,
+			jokers = 0,
+			consumables = 0,
+			cardslots = 0,
+			boosters = 0,
+			vouchers = 0
+		}
+	}},
 	loc_vars = function(self, info_queue, card)
-		return { vars = { } }
+		return { vars = { card.ability.extra.upgrades, card.ability.extra.total_upgrades } }
 	end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
 	add_to_deck = function(self, card, from_debuff)
+		dwjokers_vee_bonus(card, "re-apply")	
+
+		G.dwjokers_vee_exists = true
 	end,
-    calculate = function(self, card, context)
-	end
+	remove_from_deck = function(self, card, from_debuff)
+		dwjokers_vee_bonus(card, "remove")
+		for _, joker in ipairs(G.jokers.cards) do
+			if joker.config.center.key == "j_dwjokers_Vee" and joker ~= card then
+				return
+			end	
+		end
+		G.dwjokers_vee_exists = false
+	end,
+	calculate = function(self, card, context)
+
+		if context.ending_shop then
+			dwjokers_vee_bonus(card, "apply")
+		end
+	end	
 }
 
--- Bobette (WIP)
+-- Bobette
 SMODS.Joker {
 	key = 'Bobette',
 	loc_txt = {
 		name = 'Bobette',
 		text = {
-			"WIP"
-			--"{X:attention,C:white}X#1#{} to all {C:attention}listed",
-			--"{X:mult,C:white}Mult{} and {X:chips,C:white}Chips",
-			--"in {X:edition}Toon{C:attention} Jokers."
+			"{X:attention,C:white}X#1#{} to all {C:attention}listed",
+			"{X:mult,C:white}Mult{} and {X:chips,C:white}Chips",
+			"of {X:edition}Toon{C:attention} Jokers{} in your deck."
 		}
 	},
 	unlocked = true, 
@@ -2577,15 +3372,73 @@ SMODS.Joker {
 	pos = { x = 2, y = 2 },
 	soul_pos = { x = 2, y = 3 },
 	cost = 20,
-	config = { extra = {mult_bonus = 5} },
+	config = { extra = { bonus = 2} },
 	loc_vars = function(self, info_queue, card)
-		return { vars = {card.ability.extra.mult_bonus} }
+		return { vars = {card.ability.extra.bonus} }
 	end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
+	add_to_deck = function(self, card, from_debuff)
+
+		G.dwjokers_bobette_bonus = card.ability.extra.bonus 
+
+		-- Buscamos a todos los Toons y les aplicamos UNA capa de bonus
+		for _, v in ipairs(G.jokers.cards) do
+			if v:dwjokers_is_toon() and v ~= card then
+				dwjokers_apply_bobette_bonus(v, true, nil)
+			end
+		end
+		-- Aplicamos tambien a los toons en la basket de bassie
+		for _, v in ipairs(G.dwjokers_bassie_basket.cards) do
+			if v:dwjokers_is_toon() and v ~= card then
+				dwjokers_apply_bobette_bonus(v, true, nil)
+			end
+		end 
+	end,
+	remove_from_deck = function(self, card, from_debuff)
+		-- Quitamos UNA capa de bonus a todos los Toons
+		for _, v in ipairs(G.jokers.cards) do
+			if v:dwjokers_is_toon() and v ~= card then
+				dwjokers_apply_bobette_bonus(v, nil, true)
+			end
+		end
+		-- Quitamos tambien a los toons en la basket de bassie
+		for _, v in ipairs(G.dwjokers_bassie_basket.cards) do
+			if v:dwjokers_is_toon() and v ~= card then
+				dwjokers_apply_bobette_bonus(v, nil, true)
+			end
+		end
+	end,	
     calculate = function(self, card, context)
+
+		if context.card_added and not context.blueprint then
+			local added_card = context.card
+
+			-- Si la carta es una copia de otra ya buffeada, no aplicamos buffeos
+			if not (added_card.ability.dwjokers_bobette_stacks and added_card.ability.dwjokers_bobette_stacks > 0) then
+
+
+				local bobettes = SMODS.find_card('j_dwjokers_Bobette')
+
+				if added_card:dwjokers_is_toon() and card == bobettes[1] then
+					
+					-- Contamos Bobettes activas
+					local active_bobettes = 0
+					for _, b in ipairs(bobettes) do
+						if not b.debuff then active_bobettes = active_bobettes + 1 end
+					end
+
+					if added_card ~= card then
+						for i=1, active_bobettes do
+							dwjokers_apply_bobette_bonus(added_card, true, nil)
+						end
+					end
+				end
+			end
+		end 
 	end
+
 }
 
 -- Bassie 
@@ -2618,9 +3471,16 @@ SMODS.Joker {
  	end,
 	add_to_deck = function(self, card, from_debuff)
 		G.dwjokers_bassie_basket.config.card_limit = G.dwjokers_bassie_basket.config.card_limit + card.ability.extra.save_cards
+		G.dwjokers_bassie_exists = true
 	end,
 	remove_from_deck = function(self, card, from_debuff)
 		G.dwjokers_bassie_basket.config.card_limit = G.dwjokers_bassie_basket.config.card_limit - card.ability.extra.save_cards
+		for _, joker in ipairs(G.jokers.cards) do
+			if joker.config.center.key == "j_dwjokers_Bassie" and joker ~= card then
+				return
+			end	
+		end
+		G.dwjokers_bassie_exists = false
 	end
 }
 
@@ -2656,7 +3516,7 @@ SMODS.Joker {
 	end,
     calculate = function(self, card, context)
 		if context.joker_main then
-			return {balance = true}
+			return {balance = true, no_retrigger = true}
 		end
 	end
 }
