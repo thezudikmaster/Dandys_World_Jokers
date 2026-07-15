@@ -4,7 +4,7 @@
 --- MOD_AUTHOR: [Thezudik]
 --- MOD_DESCRIPTION: Your favorite toons as Jokers :).
 --- PREFIX: dwjokers
---- VERSION: 0.7.0
+--- VERSION: 0.7.2
 ----------------------------------------------
 ------------MOD CODE -------------------------
 
@@ -13,8 +13,6 @@ local card_types = {
 	'Planet',
 	'Spectral'
 }
-
-
 
 to_big = to_big or function(x) return x end
 
@@ -545,18 +543,23 @@ SMODS.Joker {
 }
 
 local original_start_dissolve = Card.start_dissolve
+
 function Card:start_dissolve(dissolve_colours, silent, dissolve_time_fac, no_juice)
-	local key = self.config.center.key
-	local is_joker = self.ability.set == "Joker"
-	print("test1")
-	if next(SMODS.find_card("j_dwjokers_Goob")) and is_joker then
-		print("exitazo")
-    	return -- Prevent dissolve
-	end
-	local ret = original_start_dissolve(self, dissolve_colours, silent, dissolve_time_fac, no_juice)
-	print("test3")
-    return ret
+    local is_joker = self.ability and self.ability.set == "Joker"
+    local goob_exists = next(SMODS.find_card("j_dwjokers_Goob"))
+    local selling = G.CONTROLLER.locks.selling_card
+	local sliced = G.jokers.cards[my_pos + 1].getting_sliced
+
+    -- Bloqueamos destrucción hostil
+    if is_joker and goob_exists and not selling then
+		sliced = false
+        return
+    end
+
+    -- Permitimos venta
+    return original_start_dissolve(self, dissolve_colours, silent, dissolve_time_fac, no_juice)
 end
+
 
 SMODS.Joker {
 	key = 'Brightney',
@@ -566,7 +569,7 @@ SMODS.Joker {
 			"Prevents {C:attention}debuffs{} and",
 			"redirects all {C:attention}destructions{}",
 			"to jokers in your deck to itself.",
-		}
+		},
 	},
 	unlocked = true, 
 	discovered = true,
