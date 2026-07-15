@@ -4,7 +4,7 @@
 --- MOD_AUTHOR: [Thezudik]
 --- MOD_DESCRIPTION: Your favorite toons as Jokers :).
 --- PREFIX: dwjokers
---- VERSION: 0.9.5
+--- VERSION: 0.9.7
 ----------------------------------------------
 ------------MOD CODE -------------------------
 
@@ -19,13 +19,13 @@ G.dwjokers_gigi_state_sprites = {
 
 -- G.dwjokers_delete_run : marca si la run esta siendo borrada o no ahora mismo
 
--- G.dwjokers_bassie_exists : marca si Bassie existe en tu deck
+-- G.GAME.dwjokers_bassie_exists : marca si Bassie existe en tu deck
 
--- G.dwjokers_vee_exists : marca si Vee existe en tu deck
+-- G.GAME.dwjokers_vee_exists : marca si Vee existe en tu deck
 
--- G.dwjokers_bobette_bonus : bonus multiplicativo individual de Bobette (default: 2)
+-- G.GAME.dwjokers_bobette_bonus : bonus multiplicativo individual de Bobette (default: 2)
 
--- G.dwjokers_editing_vee : carta de Vee esta abriendo el super menu ahora mismo
+-- G.GAME.dwjokers_editing_vee : carta de Vee esta abriendo el super menu ahora mismo
 
 ------------ CUSTOM SETS, POOLS y AREAS --------------
 
@@ -34,11 +34,11 @@ SMODS.current_mod.custom_card_areas = function(game)
 	
 	-- Prediction area para Coal
 	game.dwjokers_prediction_area = CardArea(
-		G.hand.T.x-1,
-     	G.hand.T.y+3,
-      	G.GAME.shop.joker_max*2*G.CARD_W,
-      	0.8*G.CARD_H, 
-        { card_limit = 1, type = 'shop', highlight_limit = 0 }
+		game.jokers.T.x, 
+		game.jokers.T.y -20,
+        game.jokers.T.w, 
+		game.jokers.T.h / 2,
+        { card_limit = 0, type = 'shop', highlight_limit = 0 }
 	)
 
 	-- Basket area para Bassie
@@ -248,21 +248,22 @@ function Card:set_seal(_seal, silent, immediate)
 	return ret
 end
 
--- highlight hook para las mecanicas de bassie y vee
+-- highlight hook para las mecanicas de bassie, vee y coal
 local highlight_ref = Card.highlight
 function Card:highlight(is_highlighted)
 	
 
-		-- para la mecanica de la basket de bassie
-		if G.dwjokers_bassie_exists then
+		-- para la mecanica de la basket de bassie. No se dibuja si es Vee o Coal
+		if G.GAME.dwjokers_bassie_exists then
 			if is_highlighted and ((self.ability.set == "Joker" and self.area == G.jokers) or 
 				((self.ability.set == "Tarot" or self.ability.set == "Planet" or self.ability.set == "Spectral") and self.area == G.consumeables) or
-				((self.ability.set == "Default" or self.ability.set == "Enhanced") and self.area == G.hand)) then
-					if self.config.center.key == "j_dwjokers_Bassie" then
-						self.children.dwjokers_my_button = dwjokers_create_bassie_button_ui(self, {func = 'dwjokers_basket_button', text = "BASKET"})
-					else
-						self.children.dwjokers_my_button = dwjokers_create_bassie_button_ui(self, {func = 'dwjokers_save_button', text = "SAVE"})
-					end
+				((self.ability.set == "Default" or self.ability.set == "Enhanced") and self.area == G.hand)) and not 
+				(self.config and self.config.center and (self.config.center.key == "j_dwjokers_Vee" or self.config.center.key == "j_dwjokers_Coal")) then
+				if self.config.center.key == "j_dwjokers_Bassie" then
+					self.children.dwjokers_my_button = dwjokers_create_bassie_button_ui(self, {func = 'dwjokers_basket_button', text = "BASKET"})
+				else
+					self.children.dwjokers_my_button = dwjokers_create_bassie_button_ui(self, {func = 'dwjokers_save_button', text = "SAVE"})
+				end
 			elseif is_highlighted and self.ability.dwjokers_in_basket then
 				self.children.dwjokers_my_button = dwjokers_create_bassie_button_ui(self, {func = 'dwjokers_retrieve_button', text = "RETRIEVE"})
 				return self:highlight_custom_bassie(is_highlighted)
@@ -270,17 +271,32 @@ function Card:highlight(is_highlighted)
 				self.children.dwjokers_my_button:remove()
 				self.children.dwjokers_my_button = nil
 			end
+		elseif self.children.dwjokers_my_button then
+			self.children.dwjokers_my_button:remove()
+			self.children.dwjokers_my_button = nil
 		end
 
 		-- para la mecanica del super menu de vee
-		if G.dwjokers_vee_exists then
+		if G.GAME.dwjokers_vee_exists then
 			if is_highlighted and self.config.center.key == "j_dwjokers_Vee" then
 				self.children.dwjokers_my_button_2 = dwjokers_create_vee_button_ui(self)
 			elseif self.children.dwjokers_my_button_2 then
 				self.children.dwjokers_my_button_2:remove()
 				self.children.dwjokers_my_button_2 = nil
 			end
-		end	
+		end
+		
+		-- para la mecanica de predicciones de coal
+		if G.GAME.dwjokers_coal_exists and G.STATE == G.STATES.SHOP then
+			if is_highlighted and self.config.center.key == "j_dwjokers_Coal" and self.area == G.jokers then
+				self.children.dwjokers_my_button_3 = dwjokers_create_coal_button_ui(self)
+			elseif is_highlighted and G.GAME.dwjokers_coal_can_predict then
+				return self:highlight_custom_bassie(is_highlighted)
+			elseif self.children.dwjokers_my_button_3 then
+				self.children.dwjokers_my_button_3:remove()
+				self.children.dwjokers_my_button_3 = nil
+			end
+		end
 
   return highlight_ref(self, is_highlighted)
 end
@@ -326,7 +342,7 @@ end
 -- Predecir contenido de booster pack. TREMENDO DOLOR DE CABEZA FUE HACER ESTO :S
 -- Card: booster pack a predecir
 -- return: tabla de cartas predichas
-function Card:simulate_open()
+function Card:simulate_open(to_area)
     if self.ability.set ~= "Booster" then return nil end
 
 	-- ACTIVAMOS ESTADO GLOBAL DE PREDICCION
@@ -400,9 +416,9 @@ function Card:simulate_open()
         if card then
             -- GUARDAMOS LA CARTA EN UNA TABLA
             table.insert(predicted_results, card)
-			card:set_card_area(G.dwjokers_prediction_area)
+			card:set_card_area(to_area)
 			card:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 2*G.SETTINGS.GAMESPEED)
-			G.dwjokers_prediction_area:emplace(card, nil)
+			to_area:emplace(card, nil)
             
             -- REGISTRAMOS MANUALMENTE LA CARTA COMO USADA SI ES JOKER
             if card.config.center.set == 'Joker' then
@@ -519,7 +535,7 @@ function dwjokers_apply_bobette_bonus(card, apply, remove)
 	-- Usamos el bonus base (ej: 2)
 	-- NO multipliques esta variable global por la cantidad de Bobettes.
 	-- Deja que sea siempre 2 (o lo que diga la carta).
-	local base_bonus = G.dwjokers_bobette_bonus or 2 
+	local base_bonus = G.GAME.dwjokers_bobette_bonus or 2 
 	
 	-- Si power es 1, multiplicamos por 2.
 	-- Si power es -1, multiplicamos por 0.5 (dividimos).
@@ -578,6 +594,8 @@ function dwjokers_apply_bobette_bonus(card, apply, remove)
 		return
 	end
 end
+
+
 
 
 ------------ UI PARA LA BASKET DE BASSIE ---------------
@@ -640,9 +658,10 @@ G.FUNCS.dwjokers_retrieve_button = function(e)
 				v:set_card_area(area)
 				v:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 2*G.SETTINGS.GAMESPEED)
 				area:emplace(v, nil)
+				v.ability.dwjokers_in_basket = false -- quitamos que la carta este en la basket
 				break
 			end
-		end	
+		end
 		
 		-- si de alguna forma usaste retrieve en la carta original, no la destruye
 		if area2 ~= G.dwjokers_bassie_basket then
@@ -673,63 +692,71 @@ end
 -- button.func: funcion que llamara el boton creado (las 3 opciones arriba)
 -- button.text: texto del boton (decorativo, "SAVE", "RETRIEVE" y "BASKET")
 function dwjokers_create_bassie_button_ui(card, button)
-  return UIBox({
-    definition = {
-      n = G.UIT.ROOT,
-      config = {
-        colour = G.C.CLEAR
-      },
-      nodes = {
-        {
-          n = G.UIT.C,
-          config = {
-            align = 'cm',
-            padding = 0.15,
-            r = 0.08,
-            hover = true,
-            shadow = true,
-            colour = G.C.CHIPS, -- color of the button background
-            button = button.func, -- function in G.FUNCS that will run when this button is clicked
-            ref_table = card,
-          },
-          nodes = {
-            {
-              n = G.UIT.R,
-              nodes = {
+    -- 1. Verificamos si es carta normal/mejorada Y está en la mano
+    -- Usamos card.config.center.set para identificar si es 'Default' o 'Enhanced'
+    local is_in_hand_playing_card = ((card.config.center.set == 'Default' or card.config.center.set == 'Enhanced') 
+                                    and (card.area == G.hand)) or card.ability.dwjokers_in_basket
+
+    -- 2. Definimos las variables de posición según la condición
+    -- tm = Top Middle (Arriba), bm = Bottom Middle (Abajo)
+    local target_align = is_in_hand_playing_card and 'tm' or 'bm'
+    
+    -- El offset y positivo empuja hacia arriba en 'tm', y negativo hacia abajo en 'bm'
+
+
+    return UIBox({
+        definition = {
+            n = G.UIT.ROOT,
+            config = {
+                colour = G.C.CLEAR
+            },
+            nodes = {
                 {
-                  n = G.UIT.T,
-                  config = {
-                    text = button.text,
-                    colour = G.C.UI.TEXT_LIGHT, -- color of the button text,
-                    scale = 0.4,
-                  }
-                },
-                {
-                  n = G.UIT.B,
-                  config = {
-                    w = 0.1,
-                    h = 0.4
-                  }
+                    n = G.UIT.C,
+                    config = {
+                        align = target_align, -- Dinámico
+                        padding = 0.15,
+                        r = 0.08,
+                        hover = true,
+                        shadow = true,
+                        colour = G.C.CHIPS,
+                        button = button.func,
+                        ref_table = card,
+                    },
+                    nodes = {
+                        {
+                            n = G.UIT.R,
+                            config = { align = "cm" },
+                            nodes = {
+                                -- Mantenemos el espaciador que querías
+                                { n = G.UIT.R, config = { align = "cm", minh = 0.1 }, nodes = {} },
+                                {
+                                    n = G.UIT.T,
+                                    config = {
+                                        text = button.text,
+                                        colour = G.C.UI.TEXT_LIGHT,
+                                        scale = 0.4,
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
+        },
+        config = {
+            align = target_align, -- Dinámico
+            major = card,
+            parent = card,
+            offset = { x = 0.0, y = 0 } -- Dinámico
         }
-      }
-    },
-    config = {
-      align = 'tm', -- position relative to the card, meaning "center left". Follow the SMODS UI guide for more alignment options
-      major = card,
-      parent = card,
-      offset = { x = 0.2, y = 0 } -- depends on the alignment you want, without an offset the button will look as if floating next to the card, instead of behind it
-    }
-  })
+    })
 end
 
 -- drawstep for my_button
 SMODS.DrawStep {
   key = 'my_button',
-  order = 100, -- before the Card is drawn
+  order = -30, -- before the Card is drawn
   func = function(card, layer)
     if card.children.dwjokers_my_button then
       card.children.dwjokers_my_button:draw()
@@ -740,12 +767,12 @@ SMODS.DrawStep {
 -- make sure SMODS doesn't draw the button after the card is drawn
 SMODS.draw_ignore_keys.dwjokers_my_button = true
 
-
 -- CREAR UI BASE DE LA BASKET DE BASSIE
 -- return: menu generico de opciones (da un boton de back muy util)
 function G.UIDEF.dwjokers_bassie_uibox()
   return create_UIBox_generic_options({contents ={create_tabs(
-    {tabs = {
+    {colour = HEX("B97EDB"),
+		tabs = {
           {
             label = "BASSIE BASKET",
             chosen = true,
@@ -759,29 +786,53 @@ end
 -- CREAR INTERIOR DE LA BASKET DE BASSIE
 -- return: nodos con un cardarea que copia la basket de bassie para renderizar
 function G.UIDEF.dwjokers_bassie_uibox_tab_definition()
-	-- creamos cardarea temporal donde copiaremos las cartas de la basket de bassie
-	local cardarea = CardArea(
-    2,2,
-    math.min(2*#G.dwjokers_bassie_basket.cards, 8*G.CARD_W),
-    0.75*G.CARD_H, 
-    {card_limit = #G.dwjokers_bassie_basket.cards, type = 'joker'})
+    local display_node = {}
 
-	-- copiamos las cartas de la basket al cardarea temporal
-	for i = 1, #G.dwjokers_bassie_basket.cards do
-		G.dwjokers_bassie_basket.cards[i].ability.bassie_flag = i
-		local new_card = copy_card(G.dwjokers_bassie_basket.cards[i], nil, nil, G.dwjokers_bassie_basket.cards[i].playing_card)
-		new_card.ability.bassie_flag = i
-		new_card.original_area = G.dwjokers_bassie_basket.cards[i].original_area -- copy_card no guarda este parametro por si mismo
-		cardarea:emplace(new_card)
-	end
+    -- 1. Verificamos si hay cartas en la cesta
+    if #G.dwjokers_bassie_basket.cards > 0 then
+    
+        local cardarea = CardArea(
+            2, 2,
+            math.min(2 * #G.dwjokers_bassie_basket.cards, 8 * G.CARD_W),
+            0.75 * G.CARD_H, 
+            {card_limit = #G.dwjokers_bassie_basket.cards, type = 'joker'}
+        )
 
-	return {n=G.UIT.ROOT, config={align = "cm", minw = 15, padding = 0.1, r = 0.1, colour = G.C.CLEAR}, nodes={
-				{n=G.UIT.R, config={align = "cm", colour = G.C.WHITE, r = 0.1}, nodes={
-				{n=G.UIT.C, config={align = "cm"}, nodes={
-				{n=G.UIT.O, config={object = cardarea}}
-			}}
-		}}
-	}}
+        for i = 1, #G.dwjokers_bassie_basket.cards do
+            local basket_card = G.dwjokers_bassie_basket.cards[i]
+            basket_card.ability.bassie_flag = i
+            local new_card = copy_card(basket_card, nil, nil, basket_card.playing_card)
+            new_card.ability.bassie_flag = i
+            new_card.original_area = basket_card.original_area
+            cardarea:emplace(new_card)
+        end
+
+        -- Guardamos el objeto CardArea en el nodo
+        display_node = {n=G.UIT.O, config={object = cardarea}}
+    else
+        
+        display_node = { n=G.UIT.R, config={align = "cm", padding = 0.5}, nodes={
+                { n=G.UIT.T, config={ text = "Just doing my part!", 
+				colour = G.C.UI.TEXT_LIGHT, scale = 0.4 }
+                }
+            }
+        }
+    end
+
+    -- 2. Retornamos la UI usando el display_node que definimos arriba
+    return {
+        n=G.UIT.ROOT, 
+        config={align = "cm", minw = 15, padding = 0.1, r = 0.1, colour = G.C.CLEAR}, nodes={
+            {
+                n=G.UIT.R, config={align = "cm", colour = G.C.CLEAR, r = 0.1, minh = 2}, nodes={
+                    { n=G.UIT.C, config={align = "cm"}, nodes={
+                            display_node
+                        }
+                    }
+                }
+            }
+        }
+    }
 end
 
 -- Funcion highlight que no dibuja botones de USE ni SELL
@@ -807,11 +858,10 @@ end
 
 ------------ UI PARA EL SUPER MENU DE Vee ---------------
 
-
 -- CREAR EL MENU CON VEE
 G.FUNCS.dwjokers_vee_menu_button = function(e)
     -- Guardamos la referencia de la carta que estamos editando
-    G.dwjokers_editing_vee = e.config.ref_table 
+    G.GAME.dwjokers_editing_vee = e.config.ref_table 
     
     G.SETTINGS.paused = true
     G.FUNCS.overlay_menu{
@@ -889,7 +939,6 @@ SMODS.DrawStep {
 -- make sure SMODS doesn't draw the button after the card is drawn
 SMODS.draw_ignore_keys.dwjokers_my_button_2 = true
 
-
 -- CREAR UI BASE DEL MENU DE VEE
 -- return: menu generico de opciones (da un boton de back muy util)
 function G.UIDEF.dwjokers_vee_uibox()
@@ -962,7 +1011,7 @@ end
 -- CREAR TAB DE STATS DEL SUPER MENU DE VEE
 -- return: nodos con stats de los bonus ya aplicados. SI EL ANTERIOR FUE TORTURA ESTE MAS JAJAJAAJ
 function G.UIDEF.dwjokers_vee_stats_tab_definition()
-    local card = G.dwjokers_editing_vee
+    local card = G.GAME.dwjokers_editing_vee
     local nodes = {}
     
     -- Si por alguna razón la carta no existe, mostramos error (seguridad)
@@ -1084,9 +1133,7 @@ function dwjokers_vee_bonus(card, mode)
             if G.SETTINGS[key] then table.insert(vee_active_settings, key) end
         end
 
-        local chosen_key = #vee_active_settings > 0 
-            and pseudorandom_element(vee_active_settings, 'dwjokers_vee') 
-            or pseudorandom_element(vee_keys, 'dwjokers_vee')
+        local chosen_key = pseudorandom_element(vee_active_settings, 'dwjokers_vee') 
 
         local action = actions[chosen_key]
         if action then
@@ -1120,6 +1167,204 @@ function dwjokers_vee_bonus(card, mode)
         end
     end
 end
+
+
+------------ UI PARA LAS PREDICCIONES DE COAL ---------------
+
+-- CALCULAR PREDICCIONES DE BOOSTER PACKS AL PRESIONAR EL BOTON DE COAL
+G.FUNCS.dwjokers_coal_predictions = function()
+	if not G.shop_booster then return end
+	G.dwjokers_prediction_area.cards = {}
+	G.GAME.dwjokers_predicted_cards = {}
+	for i=1, #G.shop_booster.cards do
+		G.GAME.dwjokers_predicted_cards[i] = G.shop_booster.cards[i]:simulate_open(G.dwjokers_prediction_area)
+	end
+end	
+
+-- FUNCION DE SALIDA DE COAL. ACTUALIZA G.GAME.dwjokers_coal_can_predict = false.
+G.FUNCS.dwjokers_coal_exit = function()
+
+	G.GAME.dwjokers_coal_can_predict = false
+
+	G.FUNCS.exit_overlay_menu()
+end	
+
+-- CREAR EL MENU DE COAL
+G.FUNCS.dwjokers_coal_button = function(e)
+
+	-- Calculamos las predicciones al presionar el boton
+	G.FUNCS.dwjokers_coal_predictions()
+
+	G.FUNCS.overlay_menu{
+		definition = G.UIDEF.dwjokers_coal_uibox(),
+		pause = false
+	}
+end
+
+-- BOTON DE COAL
+-- card: carta que llamo a la funcion
+function dwjokers_create_coal_button_ui(card)
+  return UIBox({
+    definition = {
+      n = G.UIT.ROOT,
+      config = {
+        colour = G.C.CLEAR
+      },
+      nodes = {
+        {
+          n = G.UIT.C,
+          config = {
+            align = 'cm',
+            padding = 0.15,
+            r = 0.08,
+            hover = true,
+            shadow = true,
+            colour = G.C.BLACK, -- color of the button background
+            button = 'dwjokers_coal_button', -- function in G.FUNCS that will run when this button is clicked
+            ref_table = card,
+          },
+          nodes = {
+            {
+              n = G.UIT.R,
+              nodes = {
+                {
+                  n = G.UIT.T,
+                  config = {
+                    text = "PREDICTIONS",
+                    colour = G.C.UI.TEXT_LIGHT, -- color of the button text,
+                    scale = 0.4,
+                  }
+                },
+                {
+                  n = G.UIT.B,
+                  config = {
+                    w = 0.1,
+                    h = 0.4
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    config = {
+      align = 'bm', -- position relative to the card, meaning "center left". Follow the SMODS UI guide for more alignment options
+      major = card,
+      parent = card,
+      offset = { x = 0.2, y = 0 } -- depends on the alignment you want, without an offset the button will look as if floating next to the card, instead of behind it
+    }
+  })
+end
+
+-- drawstep for my_button
+SMODS.DrawStep {
+  key = 'my_button_3',
+  order = -30, -- before the Card is drawn
+  func = function(card, layer)
+    if card.children.dwjokers_my_button_3 then
+      card.children.dwjokers_my_button_3:draw()
+    end
+  end
+}
+
+-- make sure SMODS doesn't draw the button after the card is drawn
+SMODS.draw_ignore_keys.dwjokers_my_button_3 = true
+
+-- CREAR UI BASE DEL MENU DE COAL
+-- return: menu generico de opciones (da un boton de back muy util)
+function G.UIDEF.dwjokers_coal_uibox()
+  return create_UIBox_generic_options({back_func = "dwjokers_coal_exit", contents ={create_tabs(
+    {colour = G.C.BLACK,
+		tabs = {
+          {
+            label = "COAL PREDICTIONS",
+            chosen = true,
+			tab_definition_function = G.UIDEF.dwjokers_coal_uibox_tab_definition
+		  }
+    },
+    tab_h = 4,
+    snap_to_nav = true})}})
+end
+
+-- CREAR INTERIOR DEL MENU DE COAL
+-- return: nodos con un cardarea para booster packs y otra para las cartas predichas
+function G.UIDEF.dwjokers_coal_uibox_tab_definition()
+    G.GAME.dwjokers_coal_can_predict = true
+    local main_nodes = {}
+
+    -- 1. Verificamos si hay paquetes en la tienda
+    if #G.shop_booster.cards > 0 then
+        
+        local cardarea_boosters = CardArea(
+            2, 2,
+            math.min(2 * #G.shop_booster.cards, 8 * G.CARD_W),
+            0.75 * G.CARD_H, 
+            {card_limit = #G.shop_booster.cards, type = 'joker'}
+        )
+
+        local max_size = 0 
+        for _, booster in ipairs(G.shop_booster.cards) do
+            local booster_obj = booster.config.center
+            local _size = math.max(1, (booster.ability.extra or 0) + (G.GAME.modifiers.booster_size_mod or 0))
+            if booster_obj.config and booster_obj.config.extra then
+                _size = math.max(1, booster_obj.config.extra + (G.GAME.modifiers.booster_size_mod or 0))
+            end
+            if _size > max_size then max_size = _size end 
+        end
+
+        local cardarea_predictions = CardArea(
+            2, 2,
+            math.min(2 * max_size, 8 * G.CARD_W),
+            0.75 * G.CARD_H, 
+            {card_limit = max_size, type = 'joker'}
+        )
+
+        for i = 1, #G.shop_booster.cards do
+            G.shop_booster.cards[i].coal_flag = i
+            local new_card = copy_card(G.shop_booster.cards[i], nil, nil, G.shop_booster.cards[i].playing_card)
+            cardarea_boosters:emplace(new_card)
+            new_card.dwjokers_coal_to_area = cardarea_predictions
+            new_card.coal_flag = i
+        end
+
+        -- Definimos los nodos con las áreas
+        main_nodes = {
+            {n=G.UIT.R, config={align = "cm"}, nodes={{n=G.UIT.O, config={object = cardarea_boosters}}}},
+            {n=G.UIT.R, config={align = "cm", minh = 0.4}, nodes={}},
+            {n=G.UIT.R, config={align = "cm"}, nodes={{n=G.UIT.O, config={object = cardarea_predictions}}}}
+        }
+    else
+        
+        main_nodes = {
+            {n=G.UIT.R, config={align = "cm", padding = 0.5, minh = 2}, nodes={
+                {
+                    n=G.UIT.T, 
+                    config={
+                        text = "Bworf.", 
+                        colour = G.C.UI.TEXT_LIGHT, 
+                        scale = 0.5, 
+                        shadow = true
+                    }
+                }
+            }}
+        }
+    end
+
+    -- 2. Retornamos la estructura raíz
+    return {
+        n=G.UIT.ROOT, 
+        config={align = "cm", minw = 15, padding = 0.1, r = 0.1, colour = G.C.CLEAR}, 
+        nodes={
+            {
+                n=G.UIT.C, 
+                config={align = "cm", padding = 0.2}, 
+                nodes = main_nodes
+            }
+        }
+    }
+end
+
 
 ------------ ATLAS --------------
 
@@ -1170,6 +1415,8 @@ SMODS.Edition({
         return { }
     end
 })
+
+-- Vintage shader (me lo robe de alguien mas XDDD luego hago el mio)
 SMODS.Shader({ key = 'greyscale', path = 'greyscale.fs' })
 
 -- Retrigger joker optional feature
@@ -1217,7 +1464,7 @@ SMODS.Joker {
 				card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
 			end	
 		end
-		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 			for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 				if (joker.config.center.pools or {}).dwjokers_toons then
 					card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
@@ -1233,7 +1480,7 @@ SMODS.Joker {
 					card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
 				end	
 			end
-			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 				for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 					if (joker.config.center.pools or {}).dwjokers_toons then
 						card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
@@ -1251,7 +1498,7 @@ SMODS.Joker {
 							card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
 						end	
 					end
-					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 						for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 							if (joker.config.center.pools or {}).dwjokers_toons then
 								card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
@@ -1307,7 +1554,7 @@ SMODS.Joker {
 				card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
 			end	
 		end
-		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 			for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 				if (joker.config.center.pools or {}).dwjokers_toons then
 					card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
@@ -1323,7 +1570,7 @@ SMODS.Joker {
 					card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
 				end	
 			end
-			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 				for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 					if (joker.config.center.pools or {}).dwjokers_toons then
 						card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
@@ -1341,7 +1588,7 @@ SMODS.Joker {
 							card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
 						end	
 					end
-					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 						for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 							if (joker.config.center.pools or {}).dwjokers_toons then
 								card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
@@ -1941,7 +2188,7 @@ SMODS.Joker {
 				card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
 			end	
 		end
-		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 			for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 				if (joker.config.center.pools or {}).dwjokers_toons then
 					card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
@@ -1957,7 +2204,7 @@ SMODS.Joker {
 					card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
 				end	
 			end
-			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 				for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 					if (joker.config.center.pools or {}).dwjokers_toons then
 						card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
@@ -1975,7 +2222,7 @@ SMODS.Joker {
 							card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
 						end	
 					end
-					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 						for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
 							if (joker.config.center.pools or {}).dwjokers_toons then
 								card.ability.extra.rep_stack = card.ability.extra.rep_stack + card.ability.extra.rep
@@ -2207,7 +2454,7 @@ SMODS.Joker {
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
 	calculate = function(self, card, context)
-		if context.money_altered and to_big(context.amount) > to_big(0) then
+		if context.money_altered and context.amount > 0 then
 			G.E_MANAGER:add_event(Event {
 				func = function()
 					G.GAME.dollars = G.GAME.dollars + context.amount
@@ -2431,6 +2678,7 @@ SMODS.Joker {
 --- RAROS
 
 -- Blot
+-- TODO: un par de bugs visuales cuando abres la coleccion, no se como solucionarlo por ahora.
 SMODS.Joker {
 	key = 'Blot',
 	loc_txt = {
@@ -2460,7 +2708,7 @@ SMODS.Joker {
  	end,
 	add_to_deck = function(self, card, from_debuff)
 		local bassie_consumables = 0
-		if G.dwjokers_bassie_exists then
+		if G.GAME.dwjokers_bassie_exists then
 			for _,v in ipairs(G.dwjokers_bassie_basket.cards) do
 				if table_contains(v.ability.set, card_types) then
 					bassie_consumables = bassie_consumables + 1
@@ -2468,19 +2716,27 @@ SMODS.Joker {
 			end	
 		end	
 
-		card.ability.extra.diff = #G.consumeables.cards - card.ability.extra.hand_stack
+		card.ability.extra.diff = #G.consumeables.cards + bassie_consumables - card.ability.extra.hand_stack
 		card.ability.extra.hand_stack = #G.consumeables.cards + bassie_consumables
 		card.ability.extra.mult_stack = G.hand.config.card_limit * card.ability.extra.mult_add
-		G.GAME.current_round.hands_left = G.GAME.current_round.hands_left + card.ability.extra.diff
+		-- G.GAME.current_round.hands_left = G.GAME.current_round.hands_left + card.ability.extra.diff
+		
+		G.GAME.round_resets.hands = G.GAME.round_resets.hands + card.ability.extra.diff --*
+		ease_hands_played(card.ability.extra.diff)
 	end,
 	remove_from_deck = function(self, card, from_debuff)
-		G.GAME.current_round.hands_left = G.GAME.current_round.hands_left - card.ability.extra.hand_stack
+		--G.GAME.current_round.hands_left = G.GAME.current_round.hands_left - card.ability.extra.hand_stack
+		
+		G.GAME.round_resets.hands = G.GAME.round_resets.hands - card.ability.extra.hand_stack --*
+		ease_hands_played(-card.ability.extra.hand_stack)
 	end,
     calculate = function(self, card, context)
 
+
+		-- Mecanismo de emergencia por si no se actualizo correctamente antes
 		if context.setting_blind and not context.blueprint then
 			local bassie_consumables = 0
-			if G.dwjokers_bassie_exists then
+			if G.GAME.dwjokers_bassie_exists then
 				for _,v in ipairs(G.dwjokers_bassie_basket.cards) do
 					if table_contains(v.ability.set, card_types) then
 						bassie_consumables = bassie_consumables + 1
@@ -2488,16 +2744,21 @@ SMODS.Joker {
 				end	
 			end	
 
+			card.ability.extra.diff = #G.consumeables.cards + bassie_consumables - card.ability.extra.hand_stack --*
 			card.ability.extra.hand_stack = #G.consumeables.cards + bassie_consumables
 			card.ability.extra.mult_stack = G.hand.config.card_limit * card.ability.extra.mult_add
-			G.GAME.current_round.hands_left = G.GAME.current_round.hands_left + card.ability.extra.hand_stack
+			--G.GAME.current_round.hands_left = G.GAME.current_round.hands_left + card.ability.extra.hand_stack
+			G.GAME.round_resets.hands = G.GAME.round_resets.hands + card.ability.extra.diff --*
 		end
 
-		if context.card_added or (context.dwjokers_removed and table_contains(context.dwjokers_removed_card.ability.set, card_types)) and not context.blueprint then
+		-- Cuando una carta se añade y es un consumible
+		if (context.card_added and table_contains(context.card.ability.set, card_types) ) and not context.blueprint then
+
+			-- Verificamos que la carta añadida no este en la tienda
 			G.E_MANAGER:add_event(Event({
 				func = function()
 					local bassie_consumables = 0
-					if G.dwjokers_bassie_exists then
+					if G.GAME.dwjokers_bassie_exists then
 						for _,v in ipairs(G.dwjokers_bassie_basket.cards) do
 							if table_contains(v.ability.set, card_types) then
 								bassie_consumables = bassie_consumables + 1
@@ -2505,14 +2766,46 @@ SMODS.Joker {
 						end	
 					end	
 
-					card.ability.extra.diff = #G.consumeables.cards - card.ability.extra.hand_stack
+					card.ability.extra.diff = #G.consumeables.cards + bassie_consumables - card.ability.extra.hand_stack
 					card.ability.extra.hand_stack = #G.consumeables.cards + bassie_consumables
-					G.GAME.current_round.hands_left = G.GAME.current_round.hands_left + card.ability.extra.diff
+					--G.GAME.current_round.hands_left = G.GAME.current_round.hands_left + card.ability.extra.diff
+					
+					G.GAME.round_resets.hands = G.GAME.round_resets.hands + card.ability.extra.diff --*
+					ease_hands_played(card.ability.extra.diff)
+					return true
+				end,
+				blocking = false
+			}))
+
+		end
+
+		-- Cuando una carta se remueve y es un consumible
+		if (context.dwjokers_removed and table_contains(context.dwjokers_removed_card.ability.set, card_types) ) and not context.blueprint then
+			
+			-- Verificamos que la carta removida no este en la tienda
+			G.E_MANAGER:add_event(Event({
+				func = function()
+					local bassie_consumables = 0
+					if G.GAME.dwjokers_bassie_exists then
+						for _,v in ipairs(G.dwjokers_bassie_basket.cards) do
+							if table_contains(v.ability.set, card_types) then
+								bassie_consumables = bassie_consumables + 1
+							end	
+						end	
+					end	
+
+					card.ability.extra.diff = #G.consumeables.cards + bassie_consumables - card.ability.extra.hand_stack
+					card.ability.extra.hand_stack = #G.consumeables.cards + bassie_consumables
+					--G.GAME.current_round.hands_left = G.GAME.current_round.hands_left + card.ability.extra.diff
+					
+					G.GAME.round_resets.hands = G.GAME.round_resets.hands + card.ability.extra.diff --*
+					ease_hands_played(card.ability.extra.diff)
 					return true
 				end,
 				blocking = false
 			}))
 		end
+
 
 		if context.joker_main and not context.blueprint then
 			card.ability.extra.mult_stack = G.hand.config.card_limit * card.ability.extra.mult_add
@@ -2670,7 +2963,7 @@ SMODS.Joker {
 			"Protects all {C:attention}jokers{} in your",
 			"deck from being destroyed.",
 			"{C:inactive}(Itself included, doesn't include",
-			"{C:red,E:2}self destructions{C:inactive})"
+			"{C:red,E:2}self destructives{C:inactive})"
 		}
 	},
 	unlocked = true, 
@@ -2748,7 +3041,10 @@ SMODS.Joker {
 		name = 'Coal',
 		text = {
 			"See the content of {C:attention}Booster Packs{}",
-			"by hovering over them.",
+			"in the {X:black,C:white}PREDICTIONS{} menu",
+			"by clicking this {X:edition}Toon{} while",
+			"in {C:attention}shop by hovering over",
+			"the {C:attention}Booster Pack{}."
 		}
 	},
 	unlocked = true, 
@@ -2767,25 +3063,71 @@ SMODS.Joker {
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
+	add_to_deck = function(self, card, from_debuff)
+		G.GAME.dwjokers_coal_exists = true
+	end,
 	remove_from_deck = function(self, card, from_debuff)
 		G.dwjokers_prediction_area.cards = {}
+		for _, joker in ipairs(G.jokers.cards) do
+			if joker.config.center.key == "j_dwjokers_Coal" and joker ~= card then
+				return
+			end	
+		end
+		G.GAME.dwjokers_coal_exists = false
 	end,	
 	calculate = function(self, card, context)
 		
 		if context.dwjokers_hovered and not context.open_booster and 
-		context.dwjokers_hovered_card.ability.set == "Booster" and G.shop then
-			G.dwjokers_prediction_area.cards = {}
+			context.dwjokers_hovered_card.ability.set == "Booster" and G.shop then
+			
+			local hovered_card = context.dwjokers_hovered_card
+			local to_area = hovered_card.dwjokers_coal_to_area or nil
+			
+			if to_area then
+				-- 1. Limpiar el área correctamente
+				for i = #to_area.cards, 1, -1 do
+					to_area.cards[i]:remove()
+				end
+				to_area.cards = {}
 
-			context.dwjokers_hovered_card.prediction_active = true
-			local predictions = context.dwjokers_hovered_card:simulate_open()
-		end	
+				-- 2. Encontrar el índice correcto comparando contra cada carta de la tienda
+				local index = 1
+				for i = 1, #G.shop_booster.cards do
+					-- AQUÍ ESTABA EL ERROR: Accedemos a la carta [i] de la tienda
+					if hovered_card.coal_flag == G.shop_booster.cards[i].coal_flag then
+						index = i
+						break -- Detenemos el ciclo una vez encontrado
+					end 
+				end 
+
+				-- 3. Dibujar las predicciones del índice encontrado
+				if G.GAME.dwjokers_predicted_cards[index] then
+					hovered_card.prediction_active = true
+					for i = 1, #G.GAME.dwjokers_predicted_cards[index] do
+						local card_to_copy = G.GAME.dwjokers_predicted_cards[index][i]
+						-- Creamos la copia visual para el área de predicción
+						local new_card = copy_card(card_to_copy, nil, nil, card_to_copy.playing_card)
+						new_card:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 2*G.SETTINGS.GAMESPEED)
+						to_area:emplace(new_card)
+					end 
+				end
+			end
+		end
 
 		if context.open_booster then
 			G.dwjokers_prediction_area.cards = {}
+			if card.children.dwjokers_my_button_3 then
+				card.children.dwjokers_my_button_3:remove()
+				card.children.dwjokers_my_button_3 = nil
+			end
 		end	
 
 		if context.ending_shop then
 			G.dwjokers_prediction_area.cards = {}
+			if card.children.dwjokers_my_button_3 then
+				card.children.dwjokers_my_button_3:remove()
+				card.children.dwjokers_my_button_3 = nil
+			end
 		end	
 
 		if context.buying_card then
@@ -3188,7 +3530,7 @@ SMODS.Joker {
 				card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
 			end	
 		end
-		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 			for _, joker in ipairs(G.dwjokers_bassie_basket) do
 				if (joker.config.center.pools or {}).dwjokers_toons then
 					card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
@@ -3204,7 +3546,7 @@ SMODS.Joker {
 					card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
 				end	
 			end
-			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 				for _, joker in ipairs(G.dwjokers_bassie_basket) do
 					if (joker.config.center.pools or {}).dwjokers_toons then
 						card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
@@ -3222,7 +3564,7 @@ SMODS.Joker {
 							card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
 						end	
 					end
-					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.dwjokers_bassie_exists then
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards and G.GAME.dwjokers_bassie_exists then
 						for _, joker in ipairs(G.dwjokers_bassie_basket) do
 							if (joker.config.center.pools or {}).dwjokers_toons then
 								card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
@@ -3332,7 +3674,7 @@ SMODS.Joker {
 	add_to_deck = function(self, card, from_debuff)
 		dwjokers_vee_bonus(card, "re-apply")	
 
-		G.dwjokers_vee_exists = true
+		G.GAME.dwjokers_vee_exists = true
 	end,
 	remove_from_deck = function(self, card, from_debuff)
 		dwjokers_vee_bonus(card, "remove")
@@ -3341,7 +3683,7 @@ SMODS.Joker {
 				return
 			end	
 		end
-		G.dwjokers_vee_exists = false
+		G.GAME.dwjokers_vee_exists = false
 	end,
 	calculate = function(self, card, context)
 
@@ -3381,7 +3723,7 @@ SMODS.Joker {
  	end,
 	add_to_deck = function(self, card, from_debuff)
 
-		G.dwjokers_bobette_bonus = card.ability.extra.bonus 
+		G.GAME.dwjokers_bobette_bonus = card.ability.extra.bonus 
 
 		-- Buscamos a todos los Toons y les aplicamos UNA capa de bonus
 		for _, v in ipairs(G.jokers.cards) do
@@ -3471,7 +3813,7 @@ SMODS.Joker {
  	end,
 	add_to_deck = function(self, card, from_debuff)
 		G.dwjokers_bassie_basket.config.card_limit = G.dwjokers_bassie_basket.config.card_limit + card.ability.extra.save_cards
-		G.dwjokers_bassie_exists = true
+		G.GAME.dwjokers_bassie_exists = true
 	end,
 	remove_from_deck = function(self, card, from_debuff)
 		G.dwjokers_bassie_basket.config.card_limit = G.dwjokers_bassie_basket.config.card_limit - card.ability.extra.save_cards
@@ -3480,7 +3822,8 @@ SMODS.Joker {
 				return
 			end	
 		end
-		G.dwjokers_bassie_exists = false
+
+		G.GAME.dwjokers_bassie_exists = false
 	end
 }
 
