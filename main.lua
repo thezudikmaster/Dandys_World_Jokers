@@ -4,7 +4,7 @@
 --- MOD_AUTHOR: [Thezudik]
 --- MOD_DESCRIPTION: Your favorite toons as Jokers :).
 --- PREFIX: dwjokers
---- VERSION: 0.8.1
+--- VERSION: 0.8.2
 ----------------------------------------------
 ------------MOD CODE -------------------------
 
@@ -682,11 +682,13 @@ SMODS.Joker {
 				card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
 			end	
 		end
-		for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
-			if (joker.config.center.pools or {}).dwjokers_toons then
-				card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
-			end	
-		end	
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+			for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
+				if (joker.config.center.pools or {}).dwjokers_toons then
+					card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
+				end	
+			end
+		end
 	end,
     calculate = function(self, card, context)
 		if context.setting_blind and not context.blueprint then
@@ -696,11 +698,13 @@ SMODS.Joker {
 					card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
 				end	
 			end
-			for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
-			if (joker.config.center.pools or {}).dwjokers_toons then
-				card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+				for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
+					if (joker.config.center.pools or {}).dwjokers_toons then
+						card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
+					end
+				end
 			end	
-		end	
 		end
 
 		if context.card_added or (context.dwjokers_removed and context.dwjokers_removed_card.ability.set == "Joker") and not context.blueprint then
@@ -712,11 +716,13 @@ SMODS.Joker {
 							card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
 						end	
 					end
-					for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
-						if (joker.config.center.pools or {}).dwjokers_toons then
-							card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+						for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
+							if (joker.config.center.pools or {}).dwjokers_toons then
+								card.ability.extra.mult_stack = card.ability.extra.mult_stack + card.ability.extra.mult_add
+							end	
 						end	
-					end	
+					end
 					return true
 				end,
 				blocking = false
@@ -766,11 +772,13 @@ SMODS.Joker {
 				card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
 			end	
 		end
-		for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
-			if (joker.config.center.pools or {}).dwjokers_toons then
-				card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
-			end	
-		end	
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+			for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
+				if (joker.config.center.pools or {}).dwjokers_toons then
+					card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
+				end	
+			end
+		end
 	end,
     calculate = function(self, card, context)
 		if context.setting_blind and not context.blueprint then
@@ -780,11 +788,13 @@ SMODS.Joker {
 					card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
 				end	
 			end
-			for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
-				if (joker.config.center.pools or {}).dwjokers_toons then
-					card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
-				end	
-			end	
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+				for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
+					if (joker.config.center.pools or {}).dwjokers_toons then
+						card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
+					end	
+				end
+			end
 		end
 
 		if context.card_added or (context.dwjokers_removed and context.dwjokers_removed_card.ability.set == "Joker") and not context.blueprint then
@@ -796,11 +806,13 @@ SMODS.Joker {
 							card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
 						end	
 					end
-					for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
-						if (joker.config.center.pools or {}).dwjokers_toons then
-							card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+						for _, joker in ipairs(G.dwjokers_bassie_basket.cards) do
+							if (joker.config.center.pools or {}).dwjokers_toons then
+								card.ability.extra.chips_stack = card.ability.extra.chips_stack + card.ability.extra.chips_add
+							end	
 						end	
-					end	
+					end
 					return true
 				end,
 				blocking = false
@@ -2411,11 +2423,13 @@ SMODS.Joker {
 				card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
 			end	
 		end
-		for _, joker in ipairs(G.dwjokers_bassie_basket) do
-			if (joker.config.center.pools or {}).dwjokers_toons then
-				card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
-			end	
-		end	
+		if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+			for _, joker in ipairs(G.dwjokers_bassie_basket) do
+				if (joker.config.center.pools or {}).dwjokers_toons then
+					card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
+				end	
+			end
+		end
 	end,
     calculate = function(self, card, context)
 		if context.setting_blind and not context.blueprint then
@@ -2425,10 +2439,12 @@ SMODS.Joker {
 					card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
 				end	
 			end
-			for _, joker in ipairs(G.dwjokers_bassie_basket) do
-				if (joker.config.center.pools or {}).dwjokers_toons then
-					card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
-				end	
+			if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+				for _, joker in ipairs(G.dwjokers_bassie_basket) do
+					if (joker.config.center.pools or {}).dwjokers_toons then
+						card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
+					end	
+				end
 			end	
 		end
 
@@ -2441,11 +2457,13 @@ SMODS.Joker {
 							card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
 						end	
 					end
-					for _, joker in ipairs(G.dwjokers_bassie_basket) do
-						if (joker.config.center.pools or {}).dwjokers_toons then
-							card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
+					if G.dwjokers_bassie_basket and G.dwjokers_bassie_basket.cards then
+						for _, joker in ipairs(G.dwjokers_bassie_basket) do
+							if (joker.config.center.pools or {}).dwjokers_toons then
+								card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_add
+							end	
 						end	
-					end	
+					end
 					return true
 				end,
 				blocking = false
@@ -2511,12 +2529,7 @@ SMODS.Joker {
 	loc_txt = {
 		name = 'Vee',
 		text = {
-			"{C:attention}+#1#{} Joker spaces and",
-			"{C:atention}+#2#{} Consumable spaces",
-			"at the end of shop while you have",
-			"this {X:edition}Toon{} on your deck.",
-			"{C:inactive}(Currently {C:attention}+#3#{C:inactive} Joker spaces",
-			"{C:inactive}and {C:attention}+#4#{C:inactive} Consumable spaces)"
+			"WIP"
 		}
 	},
 	unlocked = true, 
@@ -2529,9 +2542,9 @@ SMODS.Joker {
 	pos = { x = 1, y = 2 },
 	soul_pos = { x = 1, y = 3 },
 	cost = 20,
-	config = { extra = { joker_spaces = 1, consumable_spaces = 1, joker_stack = 0, consumable_stack = 0} },
+	config = { extra = { } },
 	loc_vars = function(self, info_queue, card)
-		return { vars = { card.ability.extra.joker_spaces, card.ability.extra.consumable_spaces, card.ability.extra.joker_stack, card.ability.extra.consumable_stack } }
+		return { vars = { } }
 	end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
@@ -2539,11 +2552,6 @@ SMODS.Joker {
 	add_to_deck = function(self, card, from_debuff)
 	end,
     calculate = function(self, card, context)
-		
-		if context.ending_shop then
-
-		end
-
 	end
 }
 
@@ -2553,9 +2561,10 @@ SMODS.Joker {
 	loc_txt = {
 		name = 'Bobette',
 		text = {
-			"{X:attention,C:white}X#1#{} to all {C:attention}listed",
-			"{X:mult,C:white}Mult{} and {X:chips,C:white}Chips",
-			"in {X:edition}Toon{C:attention} Jokers."
+			"WIP"
+			--"{X:attention,C:white}X#1#{} to all {C:attention}listed",
+			--"{X:mult,C:white}Mult{} and {X:chips,C:white}Chips",
+			--"in {X:edition}Toon{C:attention} Jokers."
 		}
 	},
 	unlocked = true, 
