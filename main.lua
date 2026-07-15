@@ -4,7 +4,7 @@
 --- MOD_AUTHOR: [Thezudik]
 --- MOD_DESCRIPTION: Your favorite toons as Jokers :).
 --- PREFIX: dwjokers
---- VERSION: 0.12.0
+--- VERSION: 0.16.0
 ----------------------------------------------
 ------------MOD CODE -------------------------
 
@@ -117,6 +117,19 @@ SMODS.Rarity {
     end,
 }
 
+-- Rareza de lideres
+SMODS.Rarity {
+    key = "Leader",
+	loc_txt = {
+		name = "Leader"
+	},
+    default_weight = 0,
+    badge_colour = SMODS.Gradients.dwjokers_lethal,
+    get_weight = function(self, weight, object_type)
+        return weight
+    end,
+}
+
 -- Rareza de letales
 SMODS.Rarity {
     key = "Lethal",
@@ -153,6 +166,7 @@ SMODS.ObjectType ({
 		["j_dwjokers_Rodger"] = true,
 		["j_dwjokers_Scraps"] = true,
 		["j_dwjokers_Shrimpo"] = true,
+		["j_dwjokers_Squirm"] = true,
 		["j_dwjokers_Teagan"] = true,
 		["j_dwjokers_Tisha"] = true,
 		["j_dwjokers_Toodles"] = true,
@@ -238,6 +252,7 @@ SMODS.ObjectType ({
 		["j_dwjokers_Rodger"] = true,
 		["j_dwjokers_Scraps"] = true,
 		["j_dwjokers_Shrimpo"] = true,
+		["j_dwjokers_Squirm"] = true,
 		["j_dwjokers_Teagan"] = true,
 		["j_dwjokers_Tisha"] = true,
 		["j_dwjokers_Toodles"] = true,
@@ -294,6 +309,7 @@ SMODS.ObjectType ({
 		["j_dwjokers_Rodger"] = true,
 		["j_dwjokers_Scraps"] = true,
 		["j_dwjokers_Shrimpo"] = true,
+		["j_dwjokers_Squirm"] = true,
 		["j_dwjokers_Teagan"] = true,
 		["j_dwjokers_Tisha"] = true,
 		["j_dwjokers_Toodles"] = true,
@@ -316,9 +332,6 @@ SMODS.ObjectType ({
 SMODS.current_mod.optional_features = function()
     return { retrigger_joker = true }
 end
-
-
-
 
 
 ------------ HOOKS --------------
@@ -497,6 +510,12 @@ function Card:highlight(is_highlighted)
 			self.children.dwjokers_my_button_3:remove()
 			self.children.dwjokers_my_button_3 = nil
 		end
+	end
+
+	-- para twisted Dandy y Dyle
+	if is_highlighted and (self.config.center.key == "j_dwjokers_Dandy_twisted" or self.config.center.key == "j_dwjokers_Dyle_twisted") 
+	and self.area == G.jokers then
+		return self:highlight_custom_bassie(is_highlighted)
 	end
 
   	return highlight_ref(self, is_highlighted)
@@ -793,10 +812,18 @@ function dwjokers_apply_bobette_bonus(card, apply, remove)
 		card.ability.extra.xmult_gain = card.ability.extra.xmult_gain * multiplier
 		card.ability.extra.xmult = card.ability.extra.xmult * multiplier
 		
+	elseif key == "j_dwjokers_Dyle_twisted" then
+		card.ability.extra.xmult_gain = card.ability.extra.xmult_gain * multiplier
+		card.ability.extra.xmult = card.ability.extra.xmult * multiplier
+		
 	elseif key == "j_dwjokers_Shelly" then
 		card.ability.extra.xmult_add = card.ability.extra.xmult_add * multiplier
 		card.ability.extra.xmult_stack = card.ability.extra.xmult_stack * multiplier
-		
+	
+	elseif key == "j_dwjokers_Squirm" then
+		card.ability.extra.xmult_gain = card.ability.extra.xmult_gain * multiplier
+		card.ability.extra.xmult_stack = card.ability.extra.xmult_stack * multiplier
+
 	else 
 		return
 	end
@@ -1827,10 +1854,10 @@ SMODS.Booster {
 	unlocked = true, 
 	discovered = true,
     weight = 1,
-    kind = 'dwjokers_toon_pack', -- You can also use Buffoon if you want it to belong to the vanilla kind
+    kind = 'dwjokers_toon_pack',
     cost = 6,
 	atlas = "Other_cards",
-    pos = { x = 1, y = 0 },
+    pos = { x = 0, y = 1 },
     config = { extra = 4, choose = 1 },
     loc_vars = function(self, info_queue, card)
         local cfg = (card and card.ability) or self.config
@@ -1865,7 +1892,7 @@ SMODS.Booster {
     kind = 'dwjokers_toon_pack', -- You can also use Buffoon if you want it to belong to the vanilla kind
     cost = 6,
 	atlas = "Other_cards",
-    pos = { x = 2, y = 0 },
+    pos = { x = 0, y = 2 },
     config = { extra = 4, choose = 1 },
     loc_vars = function(self, info_queue, card)
 		info_queue[#info_queue+1] = G.P_CENTERS.e_dwjokers_vintage
@@ -1901,7 +1928,7 @@ SMODS.Booster {
     kind = 'dwjokers_ichor_pack', -- You can also use Buffoon if you want it to belong to the vanilla kind
     cost = 6,
 	atlas = "Other_cards",
-    pos = { x = 3, y = 0 },
+    pos = { x = 0, y = 3 },
     config = { extra = 6, choose = 1 },
     loc_vars = function(self, info_queue, card)
 		info_queue[#info_queue+1] = G.P_CENTERS.m_dwjokers_ichor
@@ -1919,6 +1946,66 @@ SMODS.Booster {
     end,
 }
 
+
+------------ VOUCHERS ------------
+
+-- Toon Spotlight
+SMODS.Voucher {
+    key = 'toon_spotlight',
+	loc_txt = {
+		name = 'Toon Spotlight',
+		text = {
+			"{X:edition}Toon{} cards appear",
+			"{C:attention}X#1#{} more frequently",
+			"in the shop (WIP)"
+		}
+	},
+	unlocked = true, 
+	discovered = true,
+	atlas = 'Other_cards',
+    pos = { x = 4, y = 2 },
+	cost = 10,
+    config = { extra = { extra_rate = 2 } },
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.extra.extra_rate } }
+    end,
+    redeem = function(self, card)
+		local rate = G.GAME[dwjokers_toons_pack:lower() .. '_rate']
+		G.E_MANAGER:add_event(Event({
+            func = function()
+                rate = rate * card.ability.extra.extra_rate
+                return true
+            end
+        }))
+    end
+}
+
+-- Dandys World
+SMODS.Voucher {
+    key = 'dandys_world',
+	loc_txt = {
+		name = "Dandy's World",
+		text = {
+			"Lowers the rarities of",
+			"all {X:edition}Toons{} in one tier",
+			"{X:dwjokers_rainbow,C:white}Main{} -> {X:rare,C:white}Rare{} ->",
+			"{X:uncommon,C:white}Uncommon{} -> {X:common,C:white}Common{}"
+		}
+	},
+	unlocked = true, 
+	discovered = true,
+	atlas = 'Other_cards',
+    pos = { x = 4, y = 3 },
+	cost = 10,
+    config = { extra = { } },
+	requires = { 'v_dwjokers_toon_spotlight' },
+    loc_vars = function(self, info_queue, card)
+        return { vars = { } }
+    end,
+    redeem = function(self, card)
+
+    end
+}
 
 ------------ JOKERS --------------
 
@@ -2273,6 +2360,10 @@ SMODS.Joker {
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
+	add_to_deck = function(self, card, from_debuff)
+		-- En caso de ser añadido from debuff o ser copiado
+		G.hand:change_size(card.ability.extra.hand_size * card.ability.extra.looey_uses)
+	end,
 	remove_from_deck = function(self, card, from_debuff)
 		G.hand:change_size(-card.ability.extra.hand_size * card.ability.extra.looey_uses)
 	end,
@@ -2433,6 +2524,11 @@ SMODS.Joker {
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
+	add_to_deck = function(self, card, from_debuff)
+		-- En caso de que sea añadido from debuff o por ser copiado
+		SMODS.change_play_limit(card.ability.extra.limit_stack)
+		SMODS.change_discard_limit(card.ability.extra.limit_stack)
+	end,
 	remove_from_deck = function(self, card, from_debuff)
 		SMODS.change_play_limit(-card.ability.extra.limit_stack)
 		SMODS.change_discard_limit(-card.ability.extra.limit_stack)
@@ -3085,7 +3181,6 @@ SMODS.Joker {
 			for _, h_card in ipairs(G.hand.cards) do
 				local is_scoring = false
 				
-				-- Verificamos que la carta no este debuffeada
 				-- Comprobamos si ESTA carta de la mano está en la jugada que va a puntuar
 				for _, s_card in ipairs(context.full_hand) do
 					if h_card == s_card then 
@@ -3111,6 +3206,33 @@ SMODS.Joker {
 		end
 		
 		if context.joker_main then
+			local chips_sum = 0
+			
+			for _, h_card in ipairs(G.hand.cards) do
+				local is_scoring = false
+				
+				-- Comprobamos si ESTA carta de la mano está en la jugada que va a puntuar
+				for _, s_card in ipairs(context.full_hand) do
+					if h_card == s_card then 
+						is_scoring = true
+						break 
+					end
+				end
+
+				-- Si la carta NO va a puntuar (se queda en la mano)
+				if not is_scoring then
+					-- Sumamos (usamos nominal para el valor facial y perma_bonus para bonos de cartas)
+					-- Añadimos "or 0" por seguridad para evitar errores nil
+					local chips_from_card = (h_card.base.nominal or 0) + 
+						(h_card.ability.perma_bonus or 0) + 
+						(h_card.edition and (h_card.edition.chips or 0) or 0) + 
+						(h_card.ability.bonus or 0)
+					chips_sum = chips_sum + chips_from_card
+				end
+			end
+			
+			-- Guardamos el resultado final multiplicado
+			card.ability.extra.chips_to_give = chips_sum * card.ability.extra.chips_mult
 			return {
 				chip_mod = card.ability.extra.chips_to_give,
 				message = localize { type = 'variable', key = 'a_chips', vars = { card.ability.extra.chips_to_give } }
@@ -3288,26 +3410,48 @@ SMODS.Joker {
 				local is_scoring = false
 				
 				-- Verificamos que la carta no este debuffeada
-					-- Comprobamos si ESTA carta de la mano está en la jugada que va a puntuar
-					for _, s_card in ipairs(context.full_hand) do
-						if h_card == s_card then 
-							is_scoring = true
-							break 
-						end
+				-- Comprobamos si ESTA carta de la mano está en la jugada que va a puntuar
+				for _, s_card in ipairs(context.full_hand) do
+					if h_card == s_card then 
+						is_scoring = true
+						break 
 					end
+				end
 
-					-- Si la carta NO va a puntuar (se queda en la mano)
-					if not is_scoring then
-						hand_cards = hand_cards + 1
-					end
+				-- Si la carta NO va a puntuar (se queda en la mano)
+				if not is_scoring then
+					hand_cards = hand_cards + 1
+				end
 			end
 			
 			-- Guardamos el resultado final multiplicado
-			 card.ability.extra.mult_stack = hand_cards * card.ability.extra.mult_add
+			card.ability.extra.mult_stack = hand_cards * card.ability.extra.mult_add
 		end
 
 		-- Damos el mult en el joker scoring. Aqui no importa si es blueprint
 		if context.joker_main then
+			local hand_cards = 0
+			
+			for _, h_card in ipairs(G.hand.cards) do
+				local is_scoring = false
+				
+				-- Verificamos que la carta no este debuffeada
+				-- Comprobamos si ESTA carta de la mano está en la jugada que va a puntuar
+				for _, s_card in ipairs(context.full_hand) do
+					if h_card == s_card then 
+						is_scoring = true
+						break 
+					end
+				end
+
+				-- Si la carta NO va a puntuar (se queda en la mano)
+				if not is_scoring then
+					hand_cards = hand_cards + 1
+				end
+			end
+			
+			-- Guardamos el resultado final multiplicado
+			card.ability.extra.mult_stack = hand_cards * card.ability.extra.mult_add
 			return {
                 mult_mod = card.ability.extra.mult_stack,
                 message = localize { type = 'variable', key = 'a_mult', vars = { card.ability.extra.mult_stack } }
@@ -3573,6 +3717,78 @@ SMODS.Joker {
 				message = 'Goob would be so impressed!',
 				colour = G.C.CHIPS,
 				card = card
+			}
+		end	
+
+	end
+}
+
+-- Squirm
+SMODS.Joker {
+	key = 'Squirm',
+	loc_txt = {
+		name = 'Squirm',
+		text = {
+			"Before each hand, destroys",
+			"{C:attention}#3#{} random {C:attention}consumable{}",
+			"in your possesion and",
+			"gains {X:mult,C:white}X#1#{} Mult",
+			"{C:inactive}(Currently {X:mult,C:white}X#2#{C:inactive} Mult)"
+		}
+	},
+	unlocked = true, 
+	discovered = true,
+	blueprint_compat = true,
+	perishable_compat = true,
+	eternal_compat = true,
+	rarity = 3,
+	atlas = 'Jokers',
+	pos = { x = 6, y = 2 },
+	cost = 10,
+	config = { extra = { xmult_gain = 0.2, xmult_stack = 1, cards_to_destroy = 1} },
+	loc_vars = function(self, info_queue, card)
+		return { vars = {card.ability.extra.xmult_gain, card.ability.extra.xmult_stack, card.ability.extra.cards_to_destroy} }
+	end,
+	set_badges = function(self, card, badges)
+ 		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
+ 	end,
+    calculate = function(self, card, context)
+
+		if context.before then
+			-- inicializamos cartas elegibles, que son las que no esten getting sliced
+			-- ni que hayan sido removidas ya, para evitar que la misma carta se destruya dos veces
+			local eligible_cards = {}
+			local to_destroy = {}
+			for k, v in ipairs(G.consumeables.cards) do
+				if not v.getting_sliced and not v.removed then
+					table.insert(eligible_cards, v)
+				end
+			end
+			
+			-- elegimos las cartas que Squirm consumira
+			for i=1, card.ability.extra.cards_to_destroy do
+				if #eligible_cards >0 then
+					local random_card, index = pseudorandom_element(eligible_cards, "dwjokers_Squirm")
+					random_card.getting_sliced = true
+					table.insert(to_destroy, random_card)
+					table.remove(eligible_cards, index)
+					card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_gain
+				end
+			end
+
+			if #to_destroy > 0 then
+				SMODS.destroy_cards(to_destroy)
+				return {
+					message = '...I-I feel a bit better.',
+					colour = G.C.CHIPS,
+					card = card
+				}
+			end
+		end
+
+		if context.joker_main then
+			return {
+					xmult = card.ability.extra.xmult_stack
 			}
 		end	
 
@@ -3907,113 +4123,6 @@ SMODS.Joker {
         update_hand_text({ sound = 'button', volume = 0.7, pitch = 1.1, delay = 0 },
             { mult = 0, chips = 0, handname = '', level = '' })
 		end
-	end
-}
-
--- Dandy
-SMODS.Joker {
-	key = 'Dandy',
-	loc_txt = {
-		name = 'Dandy',
-		text = {
-			"At the end of {C:attention}each shop,",
-			"creates {C:attention}#1#{} random {X:edition}Toon{C:attention} card",
-			"{C:inactive}(Dandy not included)"
-		}
-	},
-	unlocked = true, 
-	discovered = true,
-	blueprint_compat = true,
-	perishable_compat = true,
-	eternal_compat = true,
-	rarity = "dwjokers_Lethal",
-	atlas = 'Mains',
-	pos = { x = 1, y = 0 },
-	soul_pos = { x = 1, y = 1 },
-	cost = 20,
-	config = { extra = {creates = 1} },
-	loc_vars = function(self, info_queue, card)
-		return { vars = { card.ability.extra.creates } }
-	end,
-	set_badges = function(self, card, badges)
- 		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
- 	end,
-	add_to_deck = function(self, card, from_debuff)
-	end,
-    calculate = function(self, card, context)
-
-		if context.ending_shop and #G.jokers.cards + G.GAME.joker_buffer < G.jokers.config.card_limit then
-            local jokers_to_create = math.min(1,
-            G.jokers.config.card_limit - (#G.jokers.cards + G.GAME.joker_buffer))
-            G.GAME.joker_buffer = G.GAME.joker_buffer + jokers_to_create
-            G.E_MANAGER:add_event(Event({
-                func = function()
-                    for _ = 1, jokers_to_create do
-                        SMODS.add_card {
-                            set = "dwjokers_toons_regular",
-							key_append = 'dwjokers_dandy',
-							soulable = true 
-                        }
-                        G.GAME.joker_buffer = 0
-                    end
-                    return true
-                end
-            }))
-            return {
-                message = "Good luck, friend!",
-                colour = G.C.BLUE,
-				card = card
-            }
-        end
-
-	end
-}
-
--- Dyle
-SMODS.Joker {
-	key = 'Dyle',
-	loc_txt = {
-		name = 'Dyle',
-		text = {
-			"This {X:edition}Toon{} gains {X:mult,C:white} X#1# {} Mult",
-			"when a {X:edition}Toon{} is destroyed",
-			"{C:inactive}(Currently {X:mult,C:white} X#2# {C:inactive} Mult)"
-		}
-	},
-	unlocked = true, 
-	discovered = true,
-	blueprint_compat = true,
-	perishable_compat = true,
-	eternal_compat = true,
-	rarity = "dwjokers_Lethal",
-	atlas = 'Mains',
-	pos = { x = 2, y = 0 },
-	soul_pos = { x = 2, y = 1 },
-	cost = 20,
-	config = { extra = { xmult_gain = 1, xmult = 1 } },
-	loc_vars = function(self, info_queue, card)
-		return { vars = { card.ability.extra.xmult_gain, card.ability.extra.xmult } }
-	end,
-	set_badges = function(self, card, badges)
- 		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
- 	end,
-	add_to_deck = function(self, card, from_debuff)
-	end,
-    calculate = function(self, card, context)
-		if context.joker_type_destroyed and not context.blueprint then
-            local toon_cards = 0
-            if context.card:dwjokers_is_toon() then toon_cards = toon_cards + 1 end
-            if toon_cards > 0 then
-                -- See note about SMODS Scaling Manipulation on the wiki
-                card.ability.extra.xmult = card.ability.extra.xmult + toon_cards * card.ability.extra.xmult_gain
-                return { message = localize { type = 'variable', key = 'a_xmult', vars = { card.ability.extra.xmult } } }
-            end
-        end
-        if context.joker_main then
-            return {
-                xmult = card.ability.extra.xmult
-            }
-        end
 	end
 }
 
@@ -4420,6 +4529,341 @@ SMODS.Joker {
 		if context.joker_main then
 			return {balance = true, no_retrigger = true}
 		end
+	end
+}
+
+
+--- LETALES
+
+-- Dandy (TOON)
+SMODS.Joker {
+	key = 'Dandy',
+	loc_txt = {
+		name = 'Dandy',
+		text = {
+			"At the end of {C:attention}each shop,",
+			"if you bought something,",
+			"creates {C:attention}#1#{} random {X:edition}Toon{C:attention} card",
+			"{C:inactive}(Dandy nor Dyle included)"
+		}
+	},
+	unlocked = true, 
+	discovered = true,
+	blueprint_compat = true,
+	perishable_compat = true,
+	eternal_compat = true,
+	rarity = "dwjokers_Leader",
+	atlas = 'Mains',
+	pos = { x = 1, y = 0 },
+	soul_pos = { x = 1, y = 1 },
+	cost = 20,
+	config = { extra = {creates = 1, toon_give = false, twisted_count = 0} },
+	loc_vars = function(self, info_queue, card)
+		return { vars = { card.ability.extra.creates, card.ability.extra.toon_give, card.ability.extra.twisted_count } }
+	end,
+	set_badges = function(self, card, badges)
+ 		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
+ 	end,
+	add_to_deck = function(self, card, from_debuff)
+	end,
+    calculate = function(self, card, context)
+
+		-- al comprar cualquier cosa en la tienda, reiniciamos el contador de twisted
+		if context.buying_card then
+			card.ability.extra.toon_give = true
+
+			-- Si era mayor a 0, reiniciamos la fase de Dandy y hace un comentario
+			if card.ability.extra.twisted_count > 0 then
+				card.ability.extra.twisted_count = 0
+				return {
+					message = "Now that's more like it.",
+					colour = G.C.BLUE,
+					card = card
+				}
+			end
+		end
+
+		-- al finalizar la tienda, si compraste algo y tienes espacio agrega un toon random
+		if context.ending_shop and #G.jokers.cards + G.GAME.joker_buffer < G.jokers.config.card_limit then
+			if card.ability.extra.toon_give then
+				local jokers_to_create = math.min(1,
+				G.jokers.config.card_limit - (#G.jokers.cards + G.GAME.joker_buffer))
+				G.GAME.joker_buffer = G.GAME.joker_buffer + jokers_to_create
+				G.E_MANAGER:add_event(Event({
+					func = function()
+						for _ = 1, jokers_to_create do
+							SMODS.add_card {
+								set = "dwjokers_toons_regular",
+								key_append = 'dwjokers_dandy',
+								soulable = true 
+							}
+							G.GAME.joker_buffer = 0
+						end
+						return true
+					end
+				}))
+				card.ability.extra.toon_give = false
+				return {
+					message = "Good luck, friend!",
+					colour = G.C.BLUE,
+					card = card
+				}
+			else
+				-- si no compraste nada, aumentamos la fase de dandy
+				card.ability.extra.twisted_count = card.ability.extra.twisted_count + 1
+
+				-- si la fase es 3 o mayor, hay probabilidad de que se convierta en twisted
+				if card.ability.extra.twisted_count > 3 then
+					if SMODS.pseudorandom_probability(card, 'dwjokers_twisted_dandy', card.ability.extra.twisted_count, 10) then
+						card:set_ability("j_dwjokers_Dandy_twisted")
+					end
+				end
+
+				-- si no se transforma en twisted, hace un comentario
+				return {
+						message = "Just buy something already.",
+						colour = G.C.BLUE,
+						card = card
+				}
+			end
+        end
+
+	end
+}
+
+-- Dyle (TOON)
+SMODS.Joker {
+	key = 'Dyle',
+	loc_txt = {
+		name = 'Dyle',
+		text = {
+			"Gains {X:mult,C:white}X#1#{} Mult",
+			"for everything bought in shop.",
+			"{C:inactive}(Currently {X:mult,C:white}X#2#{C:inactive} Mult)"
+		}
+	},
+	unlocked = true, 
+	discovered = true,
+	blueprint_compat = true,
+	perishable_compat = true,
+	eternal_compat = true,
+	rarity = "dwjokers_Leader",
+	atlas = 'Mains',
+	pos = { x = 2, y = 0 },
+	soul_pos = { x = 2, y = 1 },
+	cost = 20,
+	config = { extra = { xmult_gain = 0.5, xmult = 1, twisted_count = 0} },
+	loc_vars = function(self, info_queue, card)
+		return { vars = { card.ability.extra.xmult_gain, card.ability.extra.xmult, card.ability.extra.twisted_count } }
+	end,
+	set_badges = function(self, card, badges)
+ 		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
+ 	end,
+	add_to_deck = function(self, card, from_debuff)
+	end,
+    calculate = function(self, card, context)
+
+		-- cada que compres algo, gana xmult
+		if context.buying_card then
+			card.ability.extra.xmult = card.ability.extra.xmult + card.ability.extra.xmult_gain
+			return {
+						message = "What a wise decision, enjoy!",
+						colour = G.C.BLUE,
+						card = card
+			}
+		end
+
+		-- cada discard y mano jugada, aumenta en 1% la probabilidad de convertirse en twisted
+		if context.pre_discard or context.before then
+			card.ability.extra.twisted_count = card.ability.extra.twisted_count + 1
+		end
+
+		if context.joker_main then
+
+			-- vemos si se convierte en twisted
+			if SMODS.pseudorandom_probability(card, 'dwjokers_twisted_dyle', card.ability.extra.twisted_count, 100) then
+				card:set_ability("j_dwjokers_Dyle_twisted")
+			end
+
+			return {
+				xmult = card.ability.extra.xmult
+			}
+		end
+	end
+}
+
+-- Dandy (TWISTED)
+SMODS.Joker {
+	key = 'Dandy_twisted',
+	loc_txt = {
+		name = 'Twisted Dandy',
+		text = {
+			"Can't be sold nor destroyed.",
+			"When {C:attention}Blind{} is selected,",
+			"destroys one random {X:edition}Toon{}.",
+			"Returns to his {X:edition}Toon{} form after",
+			"spending {C:money}$#1#{} in shop",
+			"{C:inactive}(Currently {C:money}$#2#/$#1#{C:inactive} spent)"
+		}
+	},
+	unlocked = true, 
+	discovered = true,
+	blueprint_compat = false,
+	perishable_compat = true,
+	eternal_compat = true,
+	rarity = "dwjokers_Lethal",
+	atlas = 'Mains',
+	pos = { x = 5, y = 0 },
+	soul_pos = { x = 5, y = 1 },
+	cost = 20,
+	config = { extra = {money = 100, money_spent = 0} },
+	loc_vars = function(self, info_queue, card)
+		return { vars = { card.ability.extra.money, card.ability.extra.money_spent } }
+	end,
+	set_badges = function(self, card, badges)
+ 		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
+ 	end,
+    calculate = function(self, card, context)
+
+		-- al comprar cualquier cosa en la tienda, lo sumamos al dinero gastado
+		if context.buying_card then
+			card.ability.extra.money_spent = card.ability.extra.money_spent + context.card.cost
+			
+			-- si llegas a la meta de dinero, vuelve a ser Dandy normal
+			if card.ability.extra.money_spent > card.ability.extra.money then
+				card:set_ability("j_dwjokers_Dandy")
+				return {
+						message = "Let's just say you saw nothing.",
+						colour = G.C.BLUE,
+						card = card
+				}		
+			end
+		end
+
+		-- evitamos que la destruyan
+		if context.joker_type_destroyed and context.card == card then
+			return{
+				no_destroy = true
+			}
+		end
+		
+		-- destruimos un toon random (parecido a madness pero solo con toons)
+		if context.setting_blind and not context.blueprint and not context.blind.boss then
+            local destructable_jokers = {}
+            for i = 1, #G.jokers.cards do
+                if G.jokers.cards[i] ~= card and not SMODS.is_eternal(G.jokers.cards[i], card) and not G.jokers.cards[i].getting_sliced
+				and (G.jokers.cards[i].config.center.pools or {}).dwjokers_toons then
+                    destructable_jokers[#destructable_jokers + 1] =
+                        G.jokers.cards[i]
+                end
+            end
+            local joker_to_destroy = pseudorandom_element(destructable_jokers, 'dwjokers_twisted_Dandy')
+
+            if joker_to_destroy then
+                joker_to_destroy.getting_sliced = true
+                G.E_MANAGER:add_event(Event({
+                    func = function()
+                        (context.blueprint_card or card):juice_up(0.8, 0.8)
+                        joker_to_destroy:start_dissolve({ G.C.RED }, nil, 1.6)
+                        return true
+                    end
+                }))
+        	end
+        end
+
+	end
+}
+
+-- Dyle (TWISTED)
+SMODS.Joker {
+	key = 'Dyle_twisted',
+	loc_txt = {
+		name = 'Twisted Dyle',
+		text = {
+			"Can't be sold nor destroyed.",
+			"When {C:attention}Blind{} is selected,",
+			"destroys one random {X:edition}Toon{}.",
+			"Gains {X:mult,C:white}X#1#{} Mult for",
+			"every {X:edition}Toon{C:attention} card destroyed",
+			"{C:inactive}(Currently {X:mult,C:white}X#2#{C:inactive} Mult)"
+		}
+	},
+	unlocked = true, 
+	discovered = true,
+	blueprint_compat = true,
+	perishable_compat = true,
+	eternal_compat = true,
+	rarity = "dwjokers_Lethal",
+	atlas = 'Mains',
+	pos = { x = 5, y = 2 },
+	soul_pos = { x = 5, y = 3 },
+	cost = 20,
+	config = { extra = { xmult_gain = 2, xmult = 1, twisted_count = 0} },
+	loc_vars = function(self, info_queue, card)
+		return { vars = { card.ability.extra.xmult_gain, card.ability.extra.xmult, card.ability.extra.twisted_count } }
+	end,
+	set_badges = function(self, card, badges)
+ 		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
+ 	end,
+    calculate = function(self, card, context)
+
+		-- cada que un toon se destruya, gana xmult
+		if context.joker_type_destroyed and not context.blueprint then
+            local toon_cards = 0
+            if context.card:dwjokers_is_toon() then toon_cards = toon_cards + 1 end
+            if toon_cards > 0 then
+                card.ability.extra.xmult = card.ability.extra.xmult + toon_cards * card.ability.extra.xmult_gain
+                return { message = localize { type = 'variable', key = 'a_xmult', vars = { card.ability.extra.xmult } } }
+            end
+        end
+
+		-- evitamos que la destruyan
+		if context.joker_type_destroyed and context.card == card then
+			return{
+				no_destroy = true
+			}
+		end
+
+		-- cada discard y mano jugada, aumenta en 1% la probabilidad de volver a toon
+		if context.pre_discard or context.before then
+			card.ability.extra.twisted_count = card.ability.extra.twisted_count + 1
+		end
+
+		-- destruir un toon random
+		if context.setting_blind and not context.blueprint and not context.blind.boss then
+            local destructable_jokers = {}
+            for i = 1, #G.jokers.cards do
+                if G.jokers.cards[i] ~= card and not SMODS.is_eternal(G.jokers.cards[i], card) and not G.jokers.cards[i].getting_sliced
+				and (G.jokers.cards[i].config.center.pools or {}).dwjokers_toons then
+                    destructable_jokers[#destructable_jokers + 1] =
+                        G.jokers.cards[i]
+                end
+            end
+            local joker_to_destroy = pseudorandom_element(destructable_jokers, 'dwjokers_twisted_Dyle')
+
+            if joker_to_destroy then
+                joker_to_destroy.getting_sliced = true
+                G.E_MANAGER:add_event(Event({
+                    func = function()
+                        (context.blueprint_card or card):juice_up(0.8, 0.8)
+                        joker_to_destroy:start_dissolve({ G.C.RED }, nil, 1.6)
+                        return true
+                    end
+                }))
+        	end
+        end
+
+        if context.joker_main then
+
+			-- vemos si se convierte en twisted
+			if SMODS.pseudorandom_probability(card, 'dwjokers_twisted_dyle', card.ability.extra.twisted_count, 100) then
+				card:set_ability("j_dwjokers_Dyle")
+			end
+
+            return {
+                xmult = card.ability.extra.xmult
+            }
+        end
 	end
 }
 
