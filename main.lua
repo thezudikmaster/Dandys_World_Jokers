@@ -4,7 +4,7 @@
 --- MOD_AUTHOR: [Thezudik]
 --- MOD_DESCRIPTION: Your favorite toons as Jokers :).
 --- PREFIX: dwjokers
---- VERSION: 0.20.2
+--- VERSION: 0.20.3
 ----------------------------------------------
 ------------MOD CODE -------------------------
 
@@ -598,7 +598,11 @@ function SMODS.create_card(t)
 			if pseudorandom('dwjokers_toon_spotlight'..G.GAME.round_resets.ante) > (1-G.GAME.dwjokers_toon_spotlight_rate) then -- 
 				
 				-- 4. Forzamos el toon, lo escogera de la pool de toons no mains ni lideres/letales
-				t.set = "dwjokers_toons_pack"
+				if G.GAME.used_vouchers['v_dwjokers_dandys_world'] then
+					t.set = "dwjokers_toons_regular"
+				else
+					t.set = "dwjokers_toons_pack"
+				end
 			end
 		end
 	end
@@ -1182,10 +1186,21 @@ function dwjokers_rarity_change(apply, reset)
 	end
 
 	if reset then
-		for k,v in ipairs(G.P_CENTER_POOLS.Joker) do
+		for _,v in ipairs(G.P_CENTER_POOLS.Joker) do
 			if v.dwjokers_original_rarity then
-				table.remove(G.P_JOKER_RARITY_POOLS[v.rarity],k)
-				table.insert(G.P_JOKER_RARITY_POOLS[v.dwjokers_original_rarity],v)
+				
+				local pool = G.P_JOKER_RARITY_POOLS[v.rarity]
+
+				-- buscar el joker dentro de su pool real
+				for i = #pool, 1, -1 do
+					if pool[i] == v then
+						table.remove(pool, i)
+						break
+					end
+				end
+
+				-- restaurar
+				table.insert(G.P_JOKER_RARITY_POOLS[v.dwjokers_original_rarity], v)
 				v.rarity = v.dwjokers_original_rarity
 				v.dwjokers_original_rarity = nil
 			end
