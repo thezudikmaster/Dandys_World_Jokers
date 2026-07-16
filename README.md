@@ -27,7 +27,12 @@ This mod only requires [Steamodded (SMODS)](https://github.com/Steamodded/smods)
 # RECOMMENDED MODS
 Thus not required, I highly recommend also installing this mods:
 
-* [Cartomancer](https://github.com/stupxd/Cartomancer): A really good mod with a lot of Quality of Life improvements.
+* [Cartomancer](https://github.com/stupxd/Cartomancer): A really good mod with a lot of Quality of Life and optimization improvements.
 * [Saturn](https://github.com/OceanRamen/Saturn): Another mod with QoL improvements like more speeds, disable animations, etc.
 * [Amulet](https://github.com/frostice482/amulet): Mod that adds support for scoring above vanilla limit (e308).
+
+# CREDITS
+[Bloom](https://x.com/Bassiexrndlover) for making great Toon Sprites for the mod :)
+
+[Cocoa](https://x.com/cocoachironic) for making great Consumables/Booster Packs Sprites for the mod :)
 
