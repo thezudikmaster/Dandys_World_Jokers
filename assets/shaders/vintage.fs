@@ -5,7 +5,7 @@
 #endif
 
 // Look ionized.fs for explanation
-extern PRECISION vec2 greyscale;
+extern PRECISION vec2 vintage;
 
 extern PRECISION number dissolve;
 extern PRECISION number time;
@@ -37,7 +37,7 @@ vec4 effect( vec4 colour, Image texture, vec2 texture_coords, vec2 screen_coords
     // Position of a pixel within the sprite
 	vec2 uv = (((texture_coords)*(image_details)) - texture_details.xy*texture_details.ba)/texture_details.ba;
 
-    float t = greyscale.g + time;
+    float t = vintage.g + time;
     float adjust_value = 0.1 * sin(t) + 0.5;
     vec2 adjusted_uv = uv - vec2(adjust_value, adjust_value);
     adjusted_uv.x = adjusted_uv.x*texture_details.b/texture_details.a;
@@ -48,13 +48,13 @@ vec4 effect( vec4 colour, Image texture, vec2 texture_coords, vec2 screen_coords
     vec4 hsl = HSL(tex); // convert texture to HSL values
     vec4 bhsl = HSL(tex); // make a base copy of HSL values
 
-    //vec2 rotater = vec2(cos(greyscale.r*0.1221), sin(greyscale.r*0.3512));
+    //vec2 rotater = vec2(cos(vintage.r*0.1221), sin(vintage.r*0.3512));
 
 
-    if (greyscale.g > 0.0 || greyscale.g < 0.0) {
+    if (vintage.g > 0.0 || vintage.g < 0.0) {
         hsl.y = 0.02;
-        hsl.z *= (1 - adjusted_uv.x*(cos(greyscale.r*0.512)));
-        hsl.z *= (1 - adjusted_uv.y*(cos(greyscale.r*0.512)));
+        hsl.z *= (1 - adjusted_uv.x*(cos(vintage.r*0.512)));
+        hsl.z *= (1 - adjusted_uv.y*(cos(vintage.r*0.512)));
     }
 
     if (bhsl.z > 0.95){

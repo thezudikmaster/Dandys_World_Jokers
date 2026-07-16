@@ -4,7 +4,7 @@
 --- MOD_AUTHOR: [Thezudik]
 --- MOD_DESCRIPTION: Your favorite toons as Jokers :).
 --- PREFIX: dwjokers
---- VERSION: 0.20.3
+--- VERSION: 0.21.0
 ----------------------------------------------
 ------------MOD CODE -------------------------
 
@@ -13,8 +13,8 @@
 
 -- Global variable para sprites de Gigi JAJAJA take the L lol JACKPOT BIG MONEY
 G.dwjokers_gigi_state_sprites = {
-	{ x = 4, y = 3 },	-- Normal
-	{ x = 6, y = 0}		-- L
+	[1] = { x = 4, y = 3 },	-- Normal
+	[2] = { x = 6, y = 0}	-- L
 }
 
 -- G.dwjokers_delete_run : marca si la run esta siendo borrada o no ahora mismo
@@ -41,6 +41,9 @@ G.dwjokers_gigi_state_sprites = {
 
 -- G.GAME.dwjokers_toon_spotlight_rate : tasa de aparicion de toons en tienda. Para el voucher toon spotlight
 
+-- G.GAME.dwjokers_vee_table : guarda las opciones seleccionadas para los bonus de vee, de todas las vees existentes
+
+
 ------------ CUSTOM SETS, POOLS y AREAS --------------
 
 -- Custom card areas
@@ -66,7 +69,7 @@ SMODS.current_mod.custom_card_areas = function(game)
 
 	-- Basket area para Bassie (out of bounds)
 	-- OJO: las cartas de la UI de la basket son una copia de las originales.
-		game.dwjokers_bassie_basket = CardArea(
+	game.dwjokers_bassie_basket = CardArea(
 		game.jokers.T.x, 
 		game.jokers.T.y -10,
         game.jokers.T.w, 
@@ -355,7 +358,6 @@ SMODS.current_mod.optional_features = function()
 end
 
 
-
 ------------ HOOKS --------------
 
 -- Game delete run hook para evitar crasheos con remove card (no se si es mala o PESIMA practica)
@@ -462,9 +464,18 @@ function Card:sell_card()
 	return original_sell_card(self)
 end
 
--- Set edition hook con prediction activado, si es prediccion sera SILENT
+-- Set edition hook para predicciones silenciosas y Glisten
 local original_set_edition = Card.set_edition
 function Card:set_edition(edition, immediate, silent, delay)
+	if not edition then return end
+
+	-- si es Glisten, forzamos la edicion a ser holo
+	if self.config and self.config.center and self.config.center.key == "j_dwjokers_Glisten" then
+		edition = {}
+		edition.holo = true
+	end
+
+	-- si es prediccion, entonces silent es true
 	if G.GAME.dwjokers_prediction_active then
 		local ret = original_set_edition(self, edition, immediate, true, delay)
 	else
@@ -547,7 +558,7 @@ function Card:highlight(is_highlighted)
 		end
 	end
 
-	-- para twisted Dandy y Dyle
+	-- para evitar que twisted Dyle y twisted Dandy puedan venderse
 	if is_highlighted and (self.config.center.key == "j_dwjokers_Dandy_twisted" or self.config.center.key == "j_dwjokers_Dyle_twisted") 
 	and self.area == G.jokers then
 		return self:highlight_custom_bassie(is_highlighted)
@@ -583,7 +594,6 @@ G.FUNCS.draw_from_play_to_discard = function(e)
 	end
 end
 
-
 -- SMODS.create_card hook para cuando tengas el voucher de toon spotlight
 local original_smods_create_card = SMODS.create_card
 function SMODS.create_card(t)
@@ -609,6 +619,47 @@ function SMODS.create_card(t)
 
 	-- 5. Devolvemos la funcion original
 	return original_smods_create_card(t)
+end
+
+-- Generate UIBox ability table hook para ocultar habilidades y nombres si la carta es blackout
+local original_generate_UIBox_ability_table = Card.generate_UIBox_ability_table
+function Card:generate_UIBox_ability_table()
+    local res = original_generate_UIBox_ability_table(self)
+    
+	-- verificamos que la carta no se haya creado en pausa (como la coleccion)
+	-- algo minimo, permite ver que hace el blackout edition
+	if not self.created_on_pause then
+		-- Verificamos si la carta tiene la edición Blackout
+		if self.edition and self.edition.key == "e_dwjokers_blackout" then
+
+			-- 1. Reemplazamos el Nombre
+			local colour1 = {}
+			local set = (self.ability and self.ability.set) and self.ability.set or 'None'
+			local scale1 = 0
+
+			-- caso especifico si la carta es jugable
+			if set == 'Default' or set == 'Enhanced' then
+				colour1 = copy_table(G.C.UI.TEXT_DARK)
+				scale1 = 0.32
+			else
+				colour1 = copy_table(G.C.UI.TEXT_LIGHT)
+				scale1 = 0.45
+			end
+
+			res.name = {
+				{n=G.UIT.T, config={text = "????", colour = colour1, scale = scale1, shadow = true}}
+			}
+			
+			-- 2. Reemplazamos la Descripción Principal (main desc)
+			res.main = {
+				{
+					{n=G.UIT.T, config={text = "?????", colour = G.C.UI.TEXT_DARK, scale = 0.32}}
+				}
+			}
+		end
+	end
+    
+    return res
 end
 
 ------------ CUSTOM FUNCTIONS --------------
@@ -1577,6 +1628,12 @@ function G.UIDEF.dwjokers_vee_uibox()
                 label = "CURRENT BONUSES",
                 chosen = false,
                 tab_definition_function = G.UIDEF.dwjokers_vee_stats_tab_definition
+            },
+			-- Total stats
+            {
+                label = "TOTAL BONUSES",
+                chosen = false,
+                tab_definition_function = G.UIDEF.dwjokers_vee_total_stats_tab_definition
             }
         },
         tab_h = 4,
@@ -1590,6 +1647,10 @@ end
 -- return: nodos con el super menu de Vee, una tortura de nodear pues JAJ muchos nodos arre
 function G.UIDEF.dwjokers_vee_uibox_tab_definition()
 
+	-- llamamos a la referencia de la vee seleccionada
+	local vee_card = G.GAME.dwjokers_editing_vee
+	local vee_key = vee_card.ability.dwjokers_vee_key
+
     -- Función auxiliar para no repetir código y envolver cada toggle en una fila
     local function wrap_toggle(args)
         return {n=G.UIT.R, config={align = "lc", padding = 0.05}, nodes={
@@ -1599,22 +1660,22 @@ function G.UIDEF.dwjokers_vee_uibox_tab_definition()
 
     -- Primer columna
     local col_1 = {
-        wrap_toggle({label = "+1 Hands", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_hands", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
-        wrap_toggle({label = "+1 Discards", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_discards", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
-        wrap_toggle({label = "+1 Hand size", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_handsize", active_colour = HEX("25B800"), inactive_colour = HEX("041400")})
+        wrap_toggle({label = "+1 Hands", ref_table = G.GAME.dwjokers_vee_table[vee_key], ref_value = "dwjokers_vee_hands", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
+        wrap_toggle({label = "+1 Discards", ref_table = G.GAME.dwjokers_vee_table[vee_key], ref_value = "dwjokers_vee_discards", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
+        wrap_toggle({label = "+1 Hand size", ref_table = G.GAME.dwjokers_vee_table[vee_key], ref_value = "dwjokers_vee_handsize", active_colour = HEX("25B800"), inactive_colour = HEX("041400")})
     }
 
     -- Segunda columna
     local col_2 = {
-        wrap_toggle({label = "+1 Joker spaces", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_jokers", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
-        wrap_toggle({label = "+1 Consumable spaces", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_consumables", active_colour = HEX("25B800"), inactive_colour = HEX("041400")})
+        wrap_toggle({label = "+1 Joker spaces", ref_table = G.GAME.dwjokers_vee_table[vee_key], ref_value = "dwjokers_vee_jokers", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
+        wrap_toggle({label = "+1 Consumable spaces", ref_table = G.GAME.dwjokers_vee_table[vee_key], ref_value = "dwjokers_vee_consumables", active_colour = HEX("25B800"), inactive_colour = HEX("041400")})
     }
 
     -- Tercer columna
     local col_3 = {
-        wrap_toggle({label = "+1 card slot in shop", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_cardslots", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
-        wrap_toggle({label = "+1 voucher slots in shop", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_vouchers", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}),
-        wrap_toggle({label = "+1 booster pack slots in shop", ref_table = G.SETTINGS, ref_value = "dwjokers_vee_boosters", active_colour = HEX("25B800"), inactive_colour = HEX("041400")})
+        wrap_toggle({label = "+1 card slot in shop", ref_table = G.GAME.dwjokers_vee_table[vee_key], ref_value = "dwjokers_vee_cardslots", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}), 
+        wrap_toggle({label = "+1 voucher slots in shop", ref_table = G.GAME.dwjokers_vee_table[vee_key], ref_value = "dwjokers_vee_vouchers", active_colour = HEX("25B800"), inactive_colour = HEX("041400")}),
+        wrap_toggle({label = "+1 booster pack slots in shop", ref_table = G.GAME.dwjokers_vee_table[vee_key], ref_value = "dwjokers_vee_boosters", active_colour = HEX("25B800"), inactive_colour = HEX("041400")})
     }
 
     return {n=G.UIT.ROOT, config={align = "tl", minw = 15, padding = 0.1, colour = G.C.CLEAR}, nodes={
@@ -1634,14 +1695,86 @@ function G.UIDEF.dwjokers_vee_stats_tab_definition()
     
     -- Si por alguna razón la carta no existe, mostramos error (seguridad)
     if not card or not card.ability or not card.ability.extra then
-        return {n=G.UIT.R, config={align = "cm"}, nodes={{n=G.UIT.T, config={text = "Error: Card not found", scale = 0.5, colour = G.C.RED}}}}
+        return {n=G.UIT.R, config={align = "cm"}, nodes={{n=G.UIT.T, config={text = "Error: Vee not found", scale = 0.5, colour = G.C.RED}}}}
     end
 
     local upgrades = card.ability.extra.total_upgrades or {}
     
     -- Mapeo para nombres bonitos en la UI
     local display_names = {
-        hands = "Hands Played",
+        hands = "Hands",
+        discards = "Discards",
+        hand_size = "Hand Size",
+        jokers = "Joker Slots",
+        consumables = "Consumable Slots",
+        cardslots = "Shop Card Slots",
+        vouchers = "Shop Voucher Slots",
+        boosters = "Booster Pack Slots"
+    }
+
+    local found_any = false
+
+    -- Iteramos por los upgrades y creamos una fila para cada uno que sea > 0
+    for k, v in pairs(upgrades) do
+        if v > 0 then
+            found_any = true
+            local name = display_names[k] or k -- Usamos el nombre bonito o la llave si falla
+            
+            table.insert(nodes, {
+                n=G.UIT.R, config={align = "cm", padding = 0.05}, nodes={
+                    {n=G.UIT.C, config={align = "cr", minw = 2.5}, nodes={
+                        {n=G.UIT.T, config={text = name..": ", scale = 0.45, colour = G.C.UI.TEXT_LIGHT}}
+                    }},
+                    {n=G.UIT.C, config={align = "cl", minw = 1}, nodes={
+                        {n=G.UIT.T, config={text = "+"..v, scale = 0.45, colour = G.C.GREEN}}
+                    }}
+                }
+            })
+        end
+    end
+
+    -- Si no tiene mejoras, mostramos un mensaje
+    if not found_any then
+        table.insert(nodes, {
+            n=G.UIT.R, config={align = "cm", padding = 0.2}, nodes={
+                {n=G.UIT.T, config={text = "Ahem. . . is it working?", scale = 0.4, colour = G.C.UI.TEXT_INACTIVE}}
+            }
+        })
+    end
+
+    -- Retornamos la estructura completa
+    return {n=G.UIT.ROOT, config={align = "cm", minw = 6, padding = 0.1, colour = G.C.CLEAR}, nodes={
+        {n=G.UIT.C, config={align = "cm", padding = 0.1}, nodes = nodes}
+    }}
+end
+
+-- CREAR TAB DE BONUS TOTALES DEL SUPER MENU DE VEE
+-- return: nodos con stats de TODOS los bonus aplicados por todas las vees, en caso de tener mas de una
+function G.UIDEF.dwjokers_vee_total_stats_tab_definition()
+
+	-- tabla de Vees
+	local vees = SMODS.find_card('j_dwjokers_Vee')
+    local nodes = {}
+    
+    -- Si por alguna razón no existen vees, mostramos error (seguridad)
+    if not vees then
+        return {n=G.UIT.R, config={align = "cm"}, nodes={{n=G.UIT.T, config={text = "Error: Vee's not found", scale = 0.5, colour = G.C.RED}}}}
+    end
+
+	local upgrades = {}
+	-- vamos sumando los upgrades
+	for k,v in ipairs(vees) do
+		local v_upgrades = v.ability.extra.total_upgrades 
+
+		for i,j in pairs(v_upgrades) do
+			upgrades[i] = (upgrades[i] or 0) + j
+		end
+
+	end
+    
+    -- Mapeo para nombres bonitos en la UI
+    local display_names = {
+        hands = "Hands",
         discards = "Discards",
         hand_size = "Hand Size",
         jokers = "Joker Slots",
@@ -1747,8 +1880,9 @@ function dwjokers_vee_bonus(card, mode)
         -- LÓGICA DE APLICAR (Uno al azar)
         local vee_keys = {"dwjokers_vee_hands", "dwjokers_vee_discards", "dwjokers_vee_handsize", "dwjokers_vee_jokers", "dwjokers_vee_consumables", "dwjokers_vee_cardslots", "dwjokers_vee_vouchers", "dwjokers_vee_boosters"}
         local vee_active_settings = {}
-        for _, key in ipairs(vee_keys) do
-            if G.SETTINGS[key] then table.insert(vee_active_settings, key) end
+        local vee_key_key = card.ability.dwjokers_vee_key -- no se me ocurrio un mejor nombre :sob:
+		for _, key in ipairs(vee_keys) do
+            if G.GAME.dwjokers_vee_table[vee_key_key][key] then table.insert(vee_active_settings, key) end
         end
 
         local chosen_key = pseudorandom_element(vee_active_settings, 'dwjokers_vee') 
@@ -1781,7 +1915,7 @@ function dwjokers_vee_bonus(card, mode)
             end
         end
         if applied_any then
-            SMODS.calculate_effect({ message = "Copy Bonuses Applied!", colour = G.C.BLUE }, card)
+            SMODS.calculate_effect({ message = "Reapplied!", colour = G.C.BLUE }, card)
         end
     end
 end
@@ -2183,6 +2317,21 @@ SMODS.Atlas{
 
 ------------ EDITIONS Y ENHANCEMENTS ------------
 
+-- Vintage shader (me lo robe de alguien mas XDDD luego hago el mio)
+SMODS.Shader({ 
+	key = 'vintage', path = 'vintage.fs' 
+})
+
+-- Springfever shader
+SMODS.Shader({ 
+	key = 'springfever', path = 'springfever.fs' 
+})
+
+-- blackout shader
+SMODS.Shader({ 
+	key = 'blackout', path = 'blackout.fs' 
+})
+
 -- Vintage edition
 SMODS.Edition({
     key = "vintage",
@@ -2195,7 +2344,7 @@ SMODS.Edition({
 		   "stays in hand."
         }
     },
-    shader = "greyscale",
+    shader = "vintage",
     discovered = true,
     unlocked = true,
     config = { x_chips = 2 },
@@ -2225,8 +2374,59 @@ SMODS.Edition({
     end
 })
 
--- Vintage shader (me lo robe de alguien mas XDDD luego hago el mio)
-SMODS.Shader({ key = 'greyscale', path = 'greyscale.fs' })
+-- Springfever edition (WIP)
+SMODS.Edition({
+    key = "springfever",
+    loc_txt = {
+        name = "Spring Fever",
+        label = "Spring Fever",
+        text = {
+           "WIP"
+        }
+    },
+    shader = "springfever",
+    discovered = true,
+    unlocked = true,
+    config = { },
+    in_shop = true,
+    weight = 8,
+    extra_cost = 6,
+    apply_to_float = true,
+    loc_vars = function(self)
+	
+    end,
+	calculate = function(self, card, context)
+
+    end
+})
+
+-- Blackout edition (WIP)
+SMODS.Edition({
+    key = "blackout",
+    loc_txt = {
+        name = "Blackout",
+        label = "Blackout",
+        text = {
+           "WIP"
+        }
+    },
+    shader = "blackout",
+    discovered = true,
+    unlocked = true,
+    config = { },
+    in_shop = true,
+    weight = 8,
+    extra_cost = 6,
+    apply_to_float = true,
+    loc_vars = function(self, info_queue, card)
+
+    end,
+	on_apply = function(card)
+	end,
+	calculate = function(self, card, context)
+
+    end
+})
 
 -- Ichor enhancement
 SMODS.Enhancement {
@@ -2236,7 +2436,7 @@ SMODS.Enhancement {
         text = {
             "{C:mult}-#1#{} Mult. Every {C:attention}card{} in hand",
 			"permanently gains {X:mult,C:white}X#2#{} Mult.",
-			"Played {C:attention}cards{} become {X:black,C:white}ichor{} cards."
+			"Scoring {C:attention}cards{} become {X:black,C:white}ichor{} cards."
         }
     },
     unlocked = true,
@@ -2249,7 +2449,7 @@ SMODS.Enhancement {
     end,
     calculate = function(self, card, context)
 
-		if context.before then
+		if context.main_scoring and context.cardarea == G.play then
 			local is_scoring = false
 
 			-- Revisamos si la carta ichor esta anotando puntos
@@ -2305,10 +2505,7 @@ SMODS.Enhancement {
 				end
 			end
 
-		end
-
-		if context.main_scoring and context.cardarea == G.play then
-			return { mult = mod_mult(math.max(mult - card.ability.neg_mult, 0)) }
+			return { mult = (mult - card.ability.neg_mult)>=0 and -card.ability.neg_mult or mod_mult(0) }
         end
 
     end
@@ -2434,7 +2631,7 @@ SMODS.Voucher {
 		text = {
 			"{X:edition}Toon{} cards appear",
 			"{C:attention}X#1#{} more frequently",
-			"in the shop (WIP)"
+			"in the shop"
 		}
 	},
 	unlocked = true, 
@@ -2498,9 +2695,11 @@ SMODS.Consumable {
 	discovered = true,
 	atlas = 'Other_cards',
     pos = { x = 4, y = 1 },
-	cost = 4,
+	cost = 3,
     config = { max_highlighted = 3, enhancement = 'm_dwjokers_ichor' },
     loc_vars = function(self, info_queue, card)
+		info_queue[#info_queue + 1] = G.P_CENTERS.m_dwjokers_ichor
+
         return { vars = { card.ability.max_highlighted, card.ability.enhancement} }
     end,
 	use = function(self, card, area, copier)
@@ -3316,8 +3515,9 @@ SMODS.Joker {
     calculate = function(self, card, context)
 		
 		if context.setting_blind then
-			G.GAME.chips = G.GAME.chips + math.floor( G.GAME.blind.chips * card.ability.extra.score_percent / 100 )
+			local eggs_score = math.floor( G.GAME.blind.chips * card.ability.extra.score_percent / 100 )
 			return {
+				score = eggs_score,
 				message = 'Eggs.',
 				colour = G.C.CHIPS,
 				card = card
@@ -3463,23 +3663,25 @@ SMODS.Joker {
 				end
 			end
 
-			if #eligible_cards > 0 then
-				local random_card, index = pseudorandom_element(eligible_cards, "dwjokers_Connie")
-				random_card.getting_sliced = true 
+			-- elegimos las cartas que Connie destruira
+			for i=1, card.ability.extra.card_num do
+				if #eligible_cards >0 then
+					local random_card, index = pseudorandom_element(eligible_cards, "dwjokers_Connie")
+					random_card.getting_sliced = true -- no se si SMODS.destroy_cards lo especifica o no lol
+					table.remove(eligible_cards, index)
+					-- chips de la carta (rank (si tiene), perma bonus, enhancement y edition )
+					local chips_from_card = (not SMODS.has_no_rank(random_card) and random_card.base.nominal or 0) + 
+											(random_card.ability.perma_bonus or 0) + 
+											(random_card.edition and (random_card.edition.chips or 0) or 0) + 
+											(random_card.ability.bonus or 0)
 
-				-- chips de la carta (rank (si tiene), perma bonus, enhancement y edition )
-				local chips_from_card = (not SMODS.has_no_rank(random_card) and random_card.base.nominal or 0) + 
-										(random_card.ability.perma_bonus or 0) + 
-										(random_card.edition and (random_card.edition.chips or 0) or 0) + 
-										(random_card.ability.bonus or 0)
-				
-				card.ability.extra.mult_stack = card.ability.extra.mult_stack + (chips_from_card * card.ability.extra.mult)
+					-- stackeamos el mult
+					card.ability.extra.mult_stack = card.ability.extra.mult_stack + (chips_from_card * card.ability.extra.mult)
 
-				random_card.removed = true
-				G.play:remove_card(random_card)
-				SMODS.calculate_effect({ message = localize { type = 'variable', key = 'a_mult', vars = { chips_from_card } }}, card)
-				random_card:start_dissolve()
-				
+					-- destruimos la carta y arrojamos un mensaje
+					SMODS.destroy_cards(random_card)
+					SMODS.calculate_effect({ message = localize { type = 'variable', key = 'a_mult', vars = { chips_from_card * card.ability.extra.mult } }}, card)
+				end
 			end
 		end
 
@@ -3773,13 +3975,13 @@ SMODS.Joker {
 }
 
 -- Teagan
--- no compatible con Talisman
+-- no compatible con Talisman, no me esforzare en hacerlo compatible :b
 SMODS.Joker {
 	key = 'Teagan',
 	loc_txt = {
 		name = 'Teagan',
 		text = {
-			"Doubles all sources",
+			"{X:money,C:white}X#1#{} to all sources",
 			"of {C:money}money gain"
 		}
 	},
@@ -3792,9 +3994,9 @@ SMODS.Joker {
 	atlas = 'Jokers',
 	pos = { x = 4, y = 1 },
 	cost = 7,
-	config = { extra = {} },
+	config = { extra = { money_mult = 2} },
 	loc_vars = function(self, info_queue, card)
-        return { vars = { G.GAME.dollars } }
+        return { vars = { card.ability.extra.money_mult} }
     end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
@@ -3803,7 +4005,7 @@ SMODS.Joker {
 		if context.money_altered and context.amount > 0 then
 			G.E_MANAGER:add_event(Event {
 				func = function()
-					G.GAME.dollars = G.GAME.dollars + context.amount
+					G.GAME.dollars = G.GAME.dollars + context.amount * card.ability.extra.money_mult
 					return true
 				end
 			})
@@ -3846,17 +4048,28 @@ SMODS.Joker {
 	add_to_deck = function(self, card, from_debuff)
 	end,
     calculate = function(self, card, context)
+
 		if context.after and not context.blind_defeated and not context.blueprint then
+
+			-- comprobamos si hemos perdido y que podamos pagar los 20 dollars
 			if G.GAME.current_round.hands_left <= 0 and G.GAME.chips < G.GAME.blind.chips and
 				G.GAME.dollars >= 20 then
+				
+				-- añadimos un evento para que no sea instantaneo
                 G.E_MANAGER:add_event(Event {
 					blocking = false,
                     func = function()
+
+						-- seguridad
 						if not context.after or context.blind_defeated or 
 						G.GAME.current_round.hands_left > 0 or G.GAME.chips >= G.GAME.blind.chips then
 							return true
 						end
+
+						-- quitamos los dollars
 						G.GAME.dollars = G.GAME.dollars - card.ability.extra.price
+
+						-- añadimos las hands extras
 						G.GAME.current_round.hands_left = G.GAME.round_resets.hands
 						play_sound('tarot1')
                         card:juice_up(0.3, 0.5)
@@ -3869,6 +4082,7 @@ SMODS.Joker {
 				}
             end
         end
+
 	end
 }
 
@@ -4087,8 +4301,8 @@ SMODS.Joker {
 --- RAROS
 
 -- Blot
--- TODO: al usar un consumible cuando te queda una hand,
--- 		 los botones de "play hand" y "discard" no se remueven
+-- al usar un consumible cuando te queda una hand, 
+-- los botones de "play hand" y "discard" no se remueven correctamente
 SMODS.Joker {
     key = 'Blot',
     loc_txt = {
@@ -4231,6 +4445,7 @@ SMODS.Joker {
 }
 
 -- Flutter
+-- la mas facil de todas :b
 SMODS.Joker {
 	key = 'Flutter',
 	loc_txt = {
@@ -4258,6 +4473,7 @@ SMODS.Joker {
     calculate = function(self, card, context)
 		
 		if context.joker_main then
+			-- daria igual si fuera X5 mult pero shhh
 			return {
                 xchips = card.ability.extra.xchips
             }
@@ -4287,14 +4503,15 @@ SMODS.Joker {
 	atlas = 'Jokers',
 	pos = { x = 4, y = 3},
 	cost = 10,
-	config = { extra = { creates = 3 } },
+	config = { extra = { creates = 3, in_game = false } },
 	loc_vars = function(self, info_queue, card)
-		return { vars = { card.ability.extra.creates } }
+		return { vars = { card.ability.extra.creates, card.ability.extra.in_game } }
 	end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
 	add_to_deck = function(self, card, from_debuff)
+		card.ability.extra.in_game = true
 	end,
     calculate = function(self, card, context)
 		
@@ -4315,8 +4532,23 @@ SMODS.Joker {
 
 	end,
 	draw = function(self, card, layer)
-		local gigi_state, gigi_index = pseudorandom_element(G.dwjokers_gigi_state_sprites, "dwjokers_Gigi_Gambling_JACKPOT")
-		card.config.center.pos = gigi_state
+
+		-- hace que el sprite de gigi cambie entre normal y L aleatoriamente con el tiempo
+		if card.ability.extra.in_game then
+			if pseudorandom("dwjokers_Gigi_Gambling_JACKPOT") > 0.99 then
+				local gigi_state = {}
+				if card.children.center.sprite_pos.x == G.dwjokers_gigi_state_sprites[1].x then 
+					gigi_state = G.dwjokers_gigi_state_sprites[2]
+				else
+					gigi_state = G.dwjokers_gigi_state_sprites[1]
+				end
+				card:set_sprites({set = card.config.center.set, atlas = card.config.center.atlas, pos = gigi_state}, nil)
+			end
+		end
+
+		-- este hace que gigi aparezca con un sprite random que no cambie con el tiempo
+		--local gigi_state, gigi_index = pseudorandom_element(G.dwjokers_gigi_state_sprites, "dwjokers_Gigi_Gambling_JACKPOT")
+		--card.config.center.pos = gigi_state
 	end	
 }
 
@@ -4345,15 +4577,11 @@ SMODS.Joker {
 		return { vars = {} }
 	end,
 	set_card_type_badge = function(self, card, badges)
- 		local rarity_colors = {
-        [1] = G.C.RARITY.Common,
-        [2] = G.C.RARITY.Uncommon,
-        [3] = G.C.RARITY.Rare,
-        [4] = G.C.RARITY.Legendary
-		}
+		-- hace que el color de la badge corresponda a su rareza actual
+		local color = G.C.RARITY[card.config.center.rarity]
 
-		local color = rarity_colors[card.config.center.rarity] or G.C.WHITE
-
+		-- badge de rareza personalizada que dice "Perfect!" porque Glisten :b
+		-- esto solo es decorativo y no cambia la rareza real de Glisten
 		badges[#badges+1] = create_badge('Perfect!', color, G.C.WHITE, 1.2)
  	end,
 	set_badges = function(self, card, badges)
@@ -4506,7 +4734,7 @@ SMODS.Joker {
 			for i=1, card.ability.extra.cards_to_destroy do
 				if #eligible_cards >0 then
 					local random_card, index = pseudorandom_element(eligible_cards, "dwjokers_Squirm")
-					random_card.getting_sliced = true
+					random_card.getting_sliced = true -- no se si SMODS.destroy_cards lo establece ya la verdad
 					table.insert(to_destroy, random_card)
 					table.remove(eligible_cards, index)
 					card.ability.extra.xmult_stack = card.ability.extra.xmult_stack + card.ability.extra.xmult_gain
@@ -4587,7 +4815,7 @@ SMODS.Joker {
 			local to_area = hovered_card.dwjokers_coal_to_area or nil
 			
 
-			-- NO TENGO IDEA DE QUE HICE AQUI OKEY, HABRA QUE HACER INGENIERIA INVERSA A ESTA MADRE
+			-- NO RECUERDO QUE HICE AQUI OKEY, HABRA QUE HACER INGENIERIA INVERSA A ESTA MADRE
 			if to_area then
 				-- 1. Limpiar el área correctamente
 				for i = #to_area.cards, 1, -1 do
@@ -5111,7 +5339,7 @@ SMODS.Joker {
 			hand_size = 0,		-- ditto, hand size
 			jokers = 0,			-- espacios para jokers
 			consumables = 0,	-- ditto, consumibles
-			cardslots = 0,		-- espacios de cartas en tienda
+			cardslots = 0,		-- ditto, cartas en tienda
 			boosters = 0,		-- ditto, de booster packs
 			vouchers = 0		-- ditto, de vouchers
 		}
@@ -5123,11 +5351,26 @@ SMODS.Joker {
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
 	add_to_deck = function(self, card, from_debuff)
+
+		-- asignamos key unica para esta vee
+		local vees = #SMODS.find_card('j_dwjokers_Vee')
+		local key = 'vee_version_' .. tostring(vees)
+
+		-- tabla unica para esta vee donde se guardaran las opciones activadas
+		-- esto para los super menus de vee
+		if not G.GAME.dwjokers_vee_table then G.GAME.dwjokers_vee_table = {} end
+		G.GAME.dwjokers_vee_table[key] = {}
+		card.ability.dwjokers_vee_key = key
+
 		-- Aplica si Vee fue copiada. Re aplica los bonus de la original.
 		dwjokers_vee_bonus(card, "re-apply")	
 		G.GAME.dwjokers_vee_exists = true
 	end,
 	remove_from_deck = function(self, card, from_debuff)
+
+		-- limpiamos tabla de esta vee
+		G.GAME.dwjokers_vee_table[card.ability.dwjokers_vee_key] = nil
+
 		-- Se remueven los bonus de esta Vee en particular
 		dwjokers_vee_bonus(card, "remove")
 
@@ -5652,7 +5895,6 @@ SMODS.Joker {
         end
 	end
 }
-
 
 ----------------------------------------------
 ------------MOD CODE END----------------------
