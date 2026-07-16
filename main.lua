@@ -6194,7 +6194,7 @@ SMODS.Joker {
 	pos = { x = 2, y = 0 },
 	soul_pos = { x = 2, y = 1 },
 	cost = 20,
-	attributes = {'economy', 'scaling'},
+	attributes = {'xmult', 'economy', 'scaling'},
 	config = { extra = { xmult_gain = 0.5, xmult = 1, twisted_count = 0} },
 	loc_vars = function(self, info_queue, card)
 		return { vars = { card.ability.extra.xmult_gain, card.ability.extra.xmult, card.ability.extra.twisted_count } }
