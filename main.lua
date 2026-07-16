@@ -4,7 +4,7 @@
 --- MOD_AUTHOR: [Thezudik]
 --- MOD_DESCRIPTION: Your favorite toons as Jokers :).
 --- PREFIX: dwjokers
---- VERSION: 0.18.0
+--- VERSION: 0.20.2
 ----------------------------------------------
 ------------MOD CODE -------------------------
 
@@ -27,10 +27,6 @@ G.dwjokers_gigi_state_sprites = {
 
 -- G.GAME.dwjokers_pebble_exists : marca si Pebble existe en tu deck
 
--- G.GAME.dwjokers_coal_can_predict : marca si Coal puede predecir cartas
-
--- G.GAME.dwjokers_pebble_can_predict : marca si Pebble puede predecir cartas
-
 -- G.GAME.dwjokers_pebble_cards_to_predict : numero de cartas del deck a predecir para pebble
 
 -- G.GAME.dwjokers_bobette_bonus : bonus multiplicativo individual de Bobette (default: 2)
@@ -42,6 +38,8 @@ G.dwjokers_gigi_state_sprites = {
 -- G.GAME.dwjokers_soulvester_hands : guarda valor real instantaneo de las hands para soulvester
 
 -- G.GAME.dwjokers_blot_game_over : guarda si el juego esta en game over. Se actualiza solo con Blot
+
+-- G.GAME.dwjokers_toon_spotlight_rate : tasa de aparicion de toons en tienda. Para el voucher toon spotlight
 
 ------------ CUSTOM SETS, POOLS y AREAS --------------
 
@@ -129,6 +127,9 @@ SMODS.Rarity {
 	loc_txt = {
 		name = "Main"
 	},
+	pools = {
+		["Joker"] = true
+	},
     default_weight = 0,
     badge_colour = SMODS.Gradients.dwjokers_rainbow,
     get_weight = function(self, weight, object_type)
@@ -142,6 +143,9 @@ SMODS.Rarity {
 	loc_txt = {
 		name = "Leader"
 	},
+	pools = {
+		["Joker"] = true
+	},
     default_weight = 0,
     badge_colour = SMODS.Gradients.dwjokers_lethal,
     get_weight = function(self, weight, object_type)
@@ -154,6 +158,9 @@ SMODS.Rarity {
     key = "Lethal",
 	loc_txt = {
 		name = "Lethal"
+	},
+	pools = {
+		["Joker"] = true
 	},
     default_weight = 0,
     badge_colour = SMODS.Gradients.dwjokers_lethal,
@@ -304,11 +311,6 @@ SMODS.ObjectType ({
 SMODS.ObjectType ({
 	key = "dwjokers_toons_pack",
 	default = "j_dwjokers_Cosmo", -- Jiji SC-001
-	rarities = {
-            { key = "Common", rate = 1 },
-            { key = "Uncommon", rate = 0.5 },
-            { key = "Rare", rate = 0.25 },
-        },
 	cards = {
 		-- Regular
 		["j_dwjokers_Blot"] = true,
@@ -353,12 +355,14 @@ SMODS.current_mod.optional_features = function()
 end
 
 
+
 ------------ HOOKS --------------
 
 -- Game delete run hook para evitar crasheos con remove card (no se si es mala o PESIMA practica)
 local original_delete_run = Game.delete_run
 function Game:delete_run()
 	G.dwjokers_delete_run = true
+	dwjokers_rarity_change(nil, true)
 	local ret = original_delete_run(self)
 	G.dwjokers_delete_run = false
 	return ret
@@ -486,12 +490,12 @@ end
 local highlight_ref = Card.highlight
 function Card:highlight(is_highlighted)
 	
-	-- para la mecanica de la basket de bassie. No se dibuja si es Vee o Coal
+	-- para la mecanica de la basket de bassie. No se dibuja si es Vee, Coal o Pebble
 	if G.GAME.dwjokers_bassie_exists then
 		if is_highlighted and ((self.ability.set == "Joker" and self.area == G.jokers) or 
 			((self.ability.set == "Tarot" or self.ability.set == "Planet" or self.ability.set == "Spectral") and self.area == G.consumeables) or
 			((self.ability.set == "Default" or self.ability.set == "Enhanced") and self.area == G.hand)) and not 
-			(self.config and self.config.center and (self.config.center.key == "j_dwjokers_Vee" or self.config.center.key == "j_dwjokers_Coal")) then
+			(self.config and self.config.center and (self.config.center.key == "j_dwjokers_Vee" or self.config.center.key == "j_dwjokers_Coal" or self.config.center.key == "j_dwjokers_Pebble")) then
 			if self.config.center.key == "j_dwjokers_Bassie" then
 				self.children.dwjokers_my_button = dwjokers_create_bassie_button_ui(self, {func = 'dwjokers_basket_button', text = "BASKET"})
 			else
@@ -523,7 +527,7 @@ function Card:highlight(is_highlighted)
 	if G.GAME.dwjokers_coal_exists and G.STATE == G.STATES.SHOP then
 		if is_highlighted and self.config.center.key == "j_dwjokers_Coal" and self.area == G.jokers then
 			self.children.dwjokers_my_button_3 = dwjokers_create_coal_button_ui(self)
-		elseif is_highlighted and G.GAME.dwjokers_coal_can_predict then
+		elseif is_highlighted and self.coal_flag then
 			return self:highlight_custom_bassie(is_highlighted)
 		elseif self.children.dwjokers_my_button_3 then
 			self.children.dwjokers_my_button_3:remove()
@@ -535,7 +539,7 @@ function Card:highlight(is_highlighted)
 	if G.GAME.dwjokers_pebble_exists and ((G.GAME and G.GAME.blind and G.GAME.blind.in_blind) or (G.STATE == G.STATES.SHOP)) then
 		if is_highlighted and self.config.center.key == "j_dwjokers_Pebble" and self.area == G.jokers then
 			self.children.dwjokers_my_button_4 = dwjokers_create_pebble_button_ui(self)
-		elseif is_highlighted and G.GAME.dwjokers_pebble_can_predict then
+		elseif is_highlighted and self.pebble_flag then
 			return self:highlight_custom_bassie(is_highlighted)
 		elseif self.children.dwjokers_my_button_4 then
 			self.children.dwjokers_my_button_4:remove()
@@ -548,8 +552,6 @@ function Card:highlight(is_highlighted)
 	and self.area == G.jokers then
 		return self:highlight_custom_bassie(is_highlighted)
 	end
-
-	
 
   	return highlight_ref(self, is_highlighted)
 end
@@ -581,6 +583,29 @@ G.FUNCS.draw_from_play_to_discard = function(e)
 	end
 end
 
+
+-- SMODS.create_card hook para cuando tengas el voucher de toon spotlight
+local original_smods_create_card = SMODS.create_card
+function SMODS.create_card(t)
+
+	-- 1. Verificamos que no este forzada una key y que el area sea la tienda (jokers)
+	if not t.key and t.area == G.shop_jokers then
+
+		-- 2. Verificamos que ya se haya comprado el voucher de toon spotlight
+		if G.GAME and G.GAME.used_vouchers and G.GAME.used_vouchers['v_dwjokers_toon_spotlight'] then
+
+			-- 3. Probabilidad de que la carta escogida para la tienda sea un toon
+			if pseudorandom('dwjokers_toon_spotlight'..G.GAME.round_resets.ante) > (1-G.GAME.dwjokers_toon_spotlight_rate) then -- 
+				
+				-- 4. Forzamos el toon, lo escogera de la pool de toons no mains ni lideres/letales
+				t.set = "dwjokers_toons_pack"
+			end
+		end
+	end
+
+	-- 5. Devolvemos la funcion original
+	return original_smods_create_card(t)
+end
 
 ------------ CUSTOM FUNCTIONS --------------
 
@@ -816,18 +841,30 @@ function get_pebble_predictions(n)
 end
 
 -- Revisar si una carta es de toon
--- Card: carta a revisar
+-- card: carta a revisar, o tabla de valores
 -- return: true si es toon, false si no.
-function Card:dwjokers_is_toon()
-	if self.config and self.config.center then
-		if (self.config.center.pools or {}).dwjokers_toons then
+function dwjokers_is_toon(card)
+
+	-- caso 1: la funcion se llama para una carta dentro de un center pool
+	if card.pools then
+		if (card.pools or {}).dwjokers_toons then
 			return true
 		else
 			return false
 		end
-	else
-		return false
+	end
+
+	-- caso 2: la funcion se llama en una carta fuera de un center pool
+	if card.config and card.config.center and card.config.center.pools then
+		if (card.config.center.pools or {}).dwjokers_toons then
+			return true
+		else
+			return false
+		end
 	end				
+
+	-- en cualquier otro caso, false
+	return false
 end	
 
 -- Aplicar bonus de Bobette. MUY MALA PRACTICA pero no se como hacerlo mejor :S
@@ -858,16 +895,12 @@ function dwjokers_apply_bobette_bonus(card, apply, remove)
 		end
 	end 
 
-	-- Usamos el bonus base (ej: 2)
-	-- NO multipliques esta variable global por la cantidad de Bobettes.
-	-- Deja que sea siempre 2 (o lo que diga la carta).
+	-- Usamos el bonus base
 	local base_bonus = G.GAME.dwjokers_bobette_bonus or 2 
-	
-	-- Si power es 1, multiplicamos por 2.
-	-- Si power es -1, multiplicamos por 0.5 (dividimos).
 	local multiplier = base_bonus ^ power
 
-
+	-- lista de variables que se modificaran para todos los toons
+	-- NOTA. esta lista debe actualizarse manualmente cada que se añada un toon al juego, nimodos
 	if key == "j_dwjokers_Boxten" then
 		card.ability.extra.mult_add = card.ability.extra.mult_add * multiplier
 		card.ability.extra.mult_stack = card.ability.extra.mult_stack * multiplier
@@ -999,6 +1032,170 @@ function dwjokers_blot_hand_mod(card, amount)
 
 end
 
+-- Determinar tasa de aparicion de los toons segun las rarezas y el numero de jokers en cada una
+-- return: tasa de aparicion de los toons en la tienda, numero entre 0 y 1
+function dwjokers_get_toon_appearance_rate()
+	local toon_rate = 0
+	local toon_rate_in_shop = 0
+	local total_weight = 0
+
+	-- obtenemos lista de todas las rarezas, incluidas las de mods
+	-- para que se muestre, debe asignarsele el pool 'Joker' cuando se declara la rareza
+	-- si no se muestra aqui, ya no es asunto mio lol
+	local rarity_list = SMODS.ObjectTypes['Joker'].rarities
+
+	-- suma de todos los pesos
+	for _,rarity in ipairs(rarity_list) do
+		total_weight = total_weight + rarity.weight
+	end
+
+	-- si el peso es 0 o menos, retornamos 0
+	if total_weight <= 0 then return 0 end
+
+	-- numero de jokers en cada rareza
+	local total_jokers = {}
+	for _,rarity in ipairs(rarity_list) do
+		local key = rarity.key
+
+		-- rarezas vanilla, que asco que no puedan llamarse con su key alv
+		-- en principio los modders no deberian modificar estas rarezas vanilla
+		if key == "Common" then total_jokers[key] = #G.P_JOKER_RARITY_POOLS[1]
+		elseif key == "Uncommon" then total_jokers[key] = #G.P_JOKER_RARITY_POOLS[2]
+		elseif key == "Rare" then total_jokers[key] = #G.P_JOKER_RARITY_POOLS[3]
+		elseif key == "Legendary" then total_jokers[key] = #G.P_JOKER_RARITY_POOLS[4]
+		
+		-- rarezas mod
+		else total_jokers[key] = #G.P_JOKER_RARITY_POOLS[key]
+		end
+	end
+
+	-- numero de toons en cada rareza, sirve si agrego a mas toons al mod
+	local total_toons = {}
+	for _,rarity in ipairs(rarity_list) do
+		local key = rarity.key
+
+		-- inicializamos conteo
+		total_toons[key] = 0
+
+		-- rarezas vanilla
+		if key == "Common" then 
+			for i=1, total_jokers[key] do 
+				if dwjokers_is_toon(G.P_JOKER_RARITY_POOLS[1][i]) then
+					total_toons[key] = total_toons[key] + 1
+				end
+			end
+		elseif key == "Uncommon" then
+			for i=1, total_jokers[key] do 
+				if dwjokers_is_toon(G.P_JOKER_RARITY_POOLS[2][i]) then
+					total_toons[key] = total_toons[key] + 1
+				end
+			end
+		elseif key == "Rare" then
+			for i=1, total_jokers[key] do 
+				if dwjokers_is_toon(G.P_JOKER_RARITY_POOLS[3][i]) then
+					total_toons[key] = total_toons[key] + 1
+				end
+			end
+		elseif key == "Legendary" then
+			for i=1, total_jokers[key] do 
+				if dwjokers_is_toon(G.P_JOKER_RARITY_POOLS[4][i]) then
+					total_toons[key] = total_toons[key] + 1
+				end
+			end
+
+		-- rarezas mod, digo hay un par de toons que tienen rarezas mod, pero
+		-- por si alguien quiere agregar otra yo que se
+		else
+			for i=1, total_jokers[key] do 
+				if dwjokers_is_toon(G.P_JOKER_RARITY_POOLS[key][i]) then
+					total_toons[key] = total_toons[key] + 1
+				end
+			end
+		end
+	end
+
+	-- probabilidad de que el joker escogido sea de toon
+	for _,rarity in ipairs(rarity_list) do
+		local key = rarity.key
+		local weight = rarity.weight
+
+		local aux1 = rarity.weight / total_weight
+
+		local aux2 = total_toons[key] / total_jokers[key]
+
+		toon_rate = toon_rate + (aux1 * aux2)
+	end
+
+	-- probabilidad de que el joker escogido, en la tienda, sea de toon
+	local total_rate = G.GAME.joker_rate + G.GAME.playing_card_rate
+	for _,v in ipairs(SMODS.ConsumableType.obj_buffer) do
+		total_rate = total_rate + G.GAME[v:lower()..'_rate']
+	end
+
+	local aux = G.GAME.joker_rate / total_rate
+	toon_rate_shop = aux * toon_rate
+
+	return toon_rate_shop
+end
+
+-- Cambiar rarezas de toons
+-- apply: true si se disminuiran las rarezas, tiene prioridad.
+-- reset: true si se devolveran las rarezas a sus valores originales
+-- return: nada si se ha aplicado o removido el cambio de rarezas
+function dwjokers_rarity_change(apply, reset)
+
+	if apply then
+		-- Uncommon -> Common
+		for k = #G.P_JOKER_RARITY_POOLS[2], 1, -1 do
+			local v = G.P_JOKER_RARITY_POOLS[2][k]
+			if dwjokers_is_toon(v) then
+				v.rarity = 1
+				v.dwjokers_original_rarity = 2
+				table.remove(G.P_JOKER_RARITY_POOLS[2], k)
+				table.insert(G.P_JOKER_RARITY_POOLS[1], v)
+			end
+		end
+
+		-- Rare -> Uncommon
+		for k = #G.P_JOKER_RARITY_POOLS[3], 1, -1 do
+			local v = G.P_JOKER_RARITY_POOLS[3][k]
+			if dwjokers_is_toon(v) then
+				v.rarity = 2
+				v.dwjokers_original_rarity = 3
+				table.remove(G.P_JOKER_RARITY_POOLS[3], k)
+				table.insert(G.P_JOKER_RARITY_POOLS[2], v)
+			end
+		end
+
+		-- Main -> Rare
+		for k = #G.P_JOKER_RARITY_POOLS["dwjokers_Main"], 1, -1 do
+			local v = G.P_JOKER_RARITY_POOLS["dwjokers_Main"][k]
+			if dwjokers_is_toon(v) then
+				v.rarity = 3
+				v.dwjokers_original_rarity = "dwjokers_Main"
+				table.remove(G.P_JOKER_RARITY_POOLS["dwjokers_Main"], k)
+				table.insert(G.P_JOKER_RARITY_POOLS[3], v)
+			end
+		end
+
+		return
+	end
+
+	if reset then
+		for k,v in ipairs(G.P_CENTER_POOLS.Joker) do
+			if v.dwjokers_original_rarity then
+				table.remove(G.P_JOKER_RARITY_POOLS[v.rarity],k)
+				table.insert(G.P_JOKER_RARITY_POOLS[v.dwjokers_original_rarity],v)
+				v.rarity = v.dwjokers_original_rarity
+				v.dwjokers_original_rarity = nil
+			end
+		end
+
+		return
+	end
+
+end
+
 
 ------------ UI PARA LA BASKET DE BASSIE ---------------
 
@@ -1024,9 +1221,11 @@ G.FUNCS.dwjokers_save_button = function(e)
 			})
 
 		else
+			-- si no hay espacio en la basket
 			SMODS.calculate_effect({ message = "BASKET FULL!" }, card)
 		end
 	else
+		-- si de alguna forma intentas guardar a Bassie, activamos un mensajito
 		SMODS.calculate_effect({ message = "I CANT SAVE MYSELF!" }, card)
 	end
 end
@@ -1052,6 +1251,7 @@ G.FUNCS.dwjokers_retrieve_button = function(e)
 	end
 
 	-- usamos bassie_flag para identificar carta original en la basket de bassie
+	-- verificamos que el area al que se enviara la carta tenga espacio
 	if #area.cards < area.config.card_limit or area == G.hand then	
 		for _, v in ipairs(G.dwjokers_bassie_basket.cards) do
 			if v.ability.bassie_flag == card.ability.bassie_flag then
@@ -1076,6 +1276,7 @@ G.FUNCS.dwjokers_retrieve_button = function(e)
 			})
 
 	else
+		-- si no hay espacio en el area original, mostramos un mensajito
 		SMODS.calculate_effect({ message = "NOT ENOUGH SPACE!" }, card)
 	end
 end
@@ -1257,7 +1458,7 @@ function Card:highlight_custom_bassie(is_higlighted)
 end
 
 
------------- UI PARA EL SUPER MENU DE Vee ---------------
+------------ UI PARA EL SUPER MENU DE VEE ---------------
 
 -- CREAR EL MENU CON VEE
 G.FUNCS.dwjokers_vee_menu_button = function(e)
@@ -1583,14 +1784,6 @@ G.FUNCS.dwjokers_coal_predictions = function()
 	end
 end	
 
--- FUNCION DE SALIDA DE COAL. ACTUALIZA G.GAME.dwjokers_coal_can_predict = false.
-G.FUNCS.dwjokers_coal_exit = function()
-
-	G.GAME.dwjokers_coal_can_predict = false
-
-	G.FUNCS.exit_overlay_menu()
-end	
-
 -- CREAR EL MENU DE COAL
 G.FUNCS.dwjokers_coal_button = function(e)
 
@@ -1599,7 +1792,8 @@ G.FUNCS.dwjokers_coal_button = function(e)
 
 	G.FUNCS.overlay_menu{
 		definition = G.UIDEF.dwjokers_coal_uibox(),
-		pause = false
+		pause = false,
+		no_esc = true
 	}
 end
 
@@ -1677,7 +1871,7 @@ SMODS.draw_ignore_keys.dwjokers_my_button_3 = true
 -- CREAR UI BASE DEL MENU DE COAL
 -- return: menu generico de opciones (da un boton de back muy util)
 function G.UIDEF.dwjokers_coal_uibox()
-  return create_UIBox_generic_options({back_func = "dwjokers_coal_exit", contents ={create_tabs(
+  return create_UIBox_generic_options({contents ={create_tabs(
     {colour = G.C.BLACK,
 		tabs = {
           {
@@ -1693,7 +1887,6 @@ end
 -- CREAR INTERIOR DEL MENU DE COAL
 -- return: nodos con un cardarea para booster packs y otra para las cartas predichas
 function G.UIDEF.dwjokers_coal_uibox_tab_definition()
-    G.GAME.dwjokers_coal_can_predict = true
     local main_nodes = {}
 
     -- 1. Verificamos si hay paquetes en la tienda
@@ -1777,14 +1970,6 @@ G.FUNCS.dwjokers_pebble_predictions = function()
 	G.GAME.dwjokers_pebble_predicted_cards = {}
 	
 	G.GAME.dwjokers_pebble_predicted_cards = get_pebble_predictions(G.GAME.dwjokers_pebble_cards_to_predict)
-end	
-
--- FUNCION DE SALIDA DE PEBBLE. ACTUALIZA G.GAME.dwjokers_pebble_can_predict = false.
-G.FUNCS.dwjokers_pebble_exit = function()
-
-	G.GAME.dwjokers_pebble_can_predict = false
-
-	G.FUNCS.exit_overlay_menu()
 end	
 
 -- CREAR EL MENU DE PEBBLE
@@ -1873,7 +2058,7 @@ SMODS.draw_ignore_keys.dwjokers_my_button_4 = true
 -- CREAR UI BASE DEL MENU DE COAL
 -- return: menu generico de opciones (da un boton de back muy util)
 function G.UIDEF.dwjokers_pebble_uibox()
-  return create_UIBox_generic_options({back_func = "dwjokers_pebble_exit", contents ={create_tabs(
+  return create_UIBox_generic_options({contents ={create_tabs(
     {colour = G.C.BLACK,
 		tabs = {
           {
@@ -1889,7 +2074,6 @@ end
 -- CREAR INTERIOR DEL MENU DE COAL
 -- return: nodos con un cardarea para booster packs y otra para las cartas predichas
 function G.UIDEF.dwjokers_pebble_uibox_tab_definition()
-    G.GAME.dwjokers_pebble_can_predict = true
     local main_nodes = {}
 
     -- 1. Verificamos si quedan cartas en el deck
@@ -1908,6 +2092,7 @@ function G.UIDEF.dwjokers_pebble_uibox_tab_definition()
 			local new_card = copy_card(card_to_copy, nil, nil, card_to_copy.playing_card)
 			new_card:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 2*G.SETTINGS.GAMESPEED)
 			pebble_cards:emplace(new_card)
+			new_card.pebble_flag = true
 		end
 
         -- Definimos los nodos con las áreas
@@ -1944,8 +2129,6 @@ function G.UIDEF.dwjokers_pebble_uibox_tab_definition()
         }
     }
 end
-
-
 
 
 ------------ ATLAS --------------
@@ -2249,13 +2432,10 @@ SMODS.Voucher {
         return { vars = { card.ability.extra.extra_rate } }
     end,
     redeem = function(self, card)
-		local rate = G.GAME[dwjokers_toons_pack:lower() .. '_rate']
-		G.E_MANAGER:add_event(Event({
-            func = function()
-                rate = rate * card.ability.extra.extra_rate
-                return true
-            end
-        }))
+        -- calculamos la tasa de aparicion de los toons
+		-- valor solo con vanilla y dwjokers = 0.11242492492492... o 599/5328
+		G.GAME.dwjokers_toon_spotlight_rate = dwjokers_get_toon_appearance_rate()
+		G.GAME.dwjokers_toon_spotlight_rate = G.GAME.dwjokers_toon_spotlight_rate * card.ability.extra.extra_rate
     end
 }
 
@@ -2276,15 +2456,14 @@ SMODS.Voucher {
 	atlas = 'Other_cards',
     pos = { x = 4, y = 3 },
 	cost = 10,
-    config = { extra = { } },
 	requires = { 'v_dwjokers_toon_spotlight' },
-    loc_vars = function(self, info_queue, card)
-        return { vars = { } }
-    end,
     redeem = function(self, card)
-
+		-- disminuimos las rarezas siguiendo el orden
+        dwjokers_rarity_change(true, nil)
+		
     end
 }
+
 
 ------------ CONSUMABLES ------------
 
@@ -2304,7 +2483,7 @@ SMODS.Consumable {
 	discovered = true,
 	atlas = 'Other_cards',
     pos = { x = 4, y = 1 },
-	cost = 10,
+	cost = 4,
     config = { max_highlighted = 3, enhancement = 'm_dwjokers_ichor' },
     loc_vars = function(self, info_queue, card)
         return { vars = { card.ability.max_highlighted, card.ability.enhancement} }
@@ -2381,6 +2560,163 @@ SMODS.Consumable {
     can_use = function(self, card)
         return G.hand and #G.hand.highlighted > 0 and #G.hand.highlighted <= card.ability.max_highlighted
     end
+}
+
+-- Stars of the show
+SMODS.Consumable {
+    key = 'stars_show',
+	loc_txt = {
+		name = "Stars of the Show",
+		text = {
+			"Creates a",
+            "{X:dwjokers_rainbow,C:white,E:1}Main{} {X:edition}Toon{}",
+            "{C:inactive}(Must have room)",
+		}
+	},
+    set = 'Spectral',
+    unlocked = true, 
+	discovered = true,
+	atlas = 'Other_cards',
+    pos = { x = 1, y = 0 },
+	cost = 4,
+	use = function(self, card, area, copier)
+        G.E_MANAGER:add_event(Event({
+            trigger = 'after',
+            delay = 0.4,
+            func = function()
+                play_sound('timpani')
+                SMODS.add_card({ set = 'dwjokers_toons_mains'})
+                card:juice_up(0.3, 0.5)
+                return true
+            end
+        }))
+        delay(0.6)
+    end,
+    can_use = function(self, card)
+        return G.jokers and #G.jokers.cards < G.jokers.config.card_limit
+    end
+}
+
+-- Shopkeepers
+SMODS.Consumable {
+    key = 'shoopkeepers',
+	loc_txt = {
+		name = "The Shopkeepers",
+		text = {
+			"Creates a",
+            "{X:dwjokers_leader,C:white,E:1}Leader{} {X:edition}Toon{}",
+			"destroys any other {X:edition}Toon{}",
+			"{C:inactive}(Must have at least 1 Toon)"
+		}
+	},
+    set = 'Spectral',
+    unlocked = true, 
+	discovered = true,
+	atlas = 'Other_cards',
+    pos = { x = 2, y = 0 },
+	cost = 4,
+	use = function(self, card, area, copier)
+
+		-- destruye todos los toons que tengas
+		local deletable_jokers = {}
+        for _, joker in pairs(G.jokers.cards) do
+            if not SMODS.is_eternal(joker, card) and dwjokers_is_toon(joker) then 
+				deletable_jokers[#deletable_jokers + 1] = joker 
+			end
+        end
+
+		G.E_MANAGER:add_event(Event({
+            trigger = 'before',
+            delay = 0.75,
+            func = function()
+                for _, joker in pairs(deletable_jokers) do
+					joker:start_dissolve(nil, _first_dissolve)
+					_first_dissolve = true
+                end
+                return true
+            end
+        }))
+
+		-- creamos un leader al azar (50/50 dandy o dyle)
+        G.E_MANAGER:add_event(Event({
+            trigger = 'after',
+            delay = 0.4,
+            func = function()
+                play_sound('timpani')
+                SMODS.add_card({ set = 'dwjokers_toons_lethals'})
+                card:juice_up(0.3, 0.5)
+                return true
+            end
+        }))
+        delay(0.6)
+    end,
+    can_use = function(self, card)
+		local deletable_jokers = {}
+        for _, joker in pairs(G.jokers.cards) do
+            if not SMODS.is_eternal(joker, card) and dwjokers_is_toon(joker) then 
+				deletable_jokers[#deletable_jokers + 1] = joker 
+			end
+        end
+
+		local toons = #deletable_jokers
+
+        return G.jokers and toons > 0
+    end
+}
+
+-- Toon mastery
+SMODS.Consumable {
+    key = 'toon_mastery',
+	loc_txt = {
+		name = "Toon Mastery",
+		text = {
+			"Adds {C:dark_edition}Vintage{} to a",
+			"random {X:edition}Toon{}"
+		}
+	},
+    set = 'Spectral',
+    unlocked = true, 
+	discovered = true,
+	atlas = 'Other_cards',
+    pos = { x = 3, y = 0 },
+	cost = 4,
+	loc_vars = function(self, info_queue, card)
+        info_queue[#info_queue + 1] = G.P_CENTERS.e_dwjokers_vintage
+        return { vars = { G.GAME.ecto_minus or 1 } }
+    end,
+    use = function(self, card, area, copier)
+
+        local editionless_jokers = SMODS.Edition:get_edition_cards(G.jokers, true)
+		for index,joker in ipairs(editionless_jokers) do
+			if not dwjokers_is_toon(joker) then
+				table.remove(editionless_jokers, index)
+			end
+		end
+
+        G.E_MANAGER:add_event(Event({
+            trigger = 'after',
+            delay = 0.4,
+            func = function()
+                local eligible_card = pseudorandom_element(editionless_jokers, 'dwjokers_toon_mastery')
+                eligible_card:set_edition({ dwjokers_vintage = true })
+                card:juice_up(0.3, 0.5)
+                return true
+            end
+        }))
+    end,
+    can_use = function(self, card)
+
+		local editionless_jokers = SMODS.Edition:get_edition_cards(G.jokers, true)
+		for index,joker in ipairs(editionless_jokers) do
+			if not dwjokers_is_toon(joker) then
+				table.remove(editionless_jokers, index)
+			end
+		end
+
+		local toons = #editionless_jokers
+
+        return toons > 0
+    end,
 }
 
 
@@ -3994,7 +4330,16 @@ SMODS.Joker {
 		return { vars = {} }
 	end,
 	set_card_type_badge = function(self, card, badges)
- 		badges[#badges+1] = create_badge('Perfect!', G.C.RARITY.Rare, G.C.WHITE, 1.2 )
+ 		local rarity_colors = {
+        [1] = G.C.RARITY.Common,
+        [2] = G.C.RARITY.Uncommon,
+        [3] = G.C.RARITY.Rare,
+        [4] = G.C.RARITY.Legendary
+		}
+
+		local color = rarity_colors[card.config.center.rarity] or G.C.WHITE
+
+		badges[#badges+1] = create_badge('Perfect!', color, G.C.WHITE, 1.2)
  	end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
@@ -4227,6 +4572,7 @@ SMODS.Joker {
 			local to_area = hovered_card.dwjokers_coal_to_area or nil
 			
 
+			-- NO TENGO IDEA DE QUE HICE AQUI OKEY, HABRA QUE HACER INGENIERIA INVERSA A ESTA MADRE
 			if to_area then
 				-- 1. Limpiar el área correctamente
 				for i = #to_area.cards, 1, -1 do
@@ -4253,6 +4599,7 @@ SMODS.Joker {
 						local new_card = copy_card(card_to_copy, nil, nil, card_to_copy.playing_card)
 						new_card:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 2*G.SETTINGS.GAMESPEED)
 						to_area:emplace(new_card)
+						new_card.coal_flag = true
 					end 
 				end
 			end
@@ -4317,7 +4664,7 @@ SMODS.Joker {
     calculate = function(self, card, context)
 		
 		if context.retrigger_joker_check and context.other_context.joker_main then
-			if context.other_card:dwjokers_is_toon() then
+			if dwjokers_is_toon(context.other_card) then
 				return { repetitions = 1 }
 			end	
 		end
@@ -4540,7 +4887,7 @@ SMODS.Joker {
 		G.GAME.dwjokers_pebble_cards_to_predict = card.ability.extra.deck_cards
 	end,
 	remove_from_deck = function(self, card, from_debuff)
-		G.dwjokers_coal_prediction_area.cards = {}
+		G.dwjokers_pebble_prediction_area.cards = {}
 		-- revisamos que no queden Coals entre los jokers
 		for _, joker in ipairs(G.jokers.cards) do
 			if joker.config.center.key == "j_dwjokers_Pebble" and joker ~= card then
@@ -4819,13 +5166,13 @@ SMODS.Joker {
 
 		-- Buscamos a todos los Toons y les aplicamos UNA capa de bonus
 		for _, v in ipairs(G.jokers.cards) do
-			if v:dwjokers_is_toon() and v ~= card then
+			if dwjokers_is_toon(v) and v ~= card then
 				dwjokers_apply_bobette_bonus(v, true, nil)
 			end
 		end
 		-- Aplicamos tambien a los toons en la basket de bassie
 		for _, v in ipairs(G.dwjokers_bassie_basket.cards) do
-			if v:dwjokers_is_toon() and v ~= card then
+			if dwjokers_is_toon(v) and v ~= card then
 				dwjokers_apply_bobette_bonus(v, true, nil)
 			end
 		end 
@@ -4833,13 +5180,13 @@ SMODS.Joker {
 	remove_from_deck = function(self, card, from_debuff)
 		-- Quitamos UNA capa de bonus a todos los Toons
 		for _, v in ipairs(G.jokers.cards) do
-			if v:dwjokers_is_toon() and v ~= card then
+			if dwjokers_is_toon(v) and v ~= card then
 				dwjokers_apply_bobette_bonus(v, nil, true)
 			end
 		end
 		-- Quitamos tambien a los toons en la basket de bassie
 		for _, v in ipairs(G.dwjokers_bassie_basket.cards) do
-			if v:dwjokers_is_toon() and v ~= card then
+			if dwjokers_is_toon(v) and v ~= card then
 				dwjokers_apply_bobette_bonus(v, nil, true)
 			end
 		end
@@ -4855,7 +5202,7 @@ SMODS.Joker {
 
 				local bobettes = SMODS.find_card('j_dwjokers_Bobette')
 
-				if added_card:dwjokers_is_toon() and card == bobettes[1] then
+				if dwjokers_is_toon(added_card) and card == bobettes[1] then
 					
 					-- Contamos Bobettes activas
 					local active_bobettes = 0
@@ -5234,7 +5581,7 @@ SMODS.Joker {
 		-- cada que un toon se destruya, gana xmult
 		if context.joker_type_destroyed and not context.blueprint then
             local toon_cards = 0
-            if context.card:dwjokers_is_toon() then toon_cards = toon_cards + 1 end
+            if dwjokers_is_toon(context.card) then toon_cards = toon_cards + 1 end
             if toon_cards > 0 then
                 card.ability.extra.xmult = card.ability.extra.xmult + toon_cards * card.ability.extra.xmult_gain
                 return { message = localize { type = 'variable', key = 'a_xmult', vars = { card.ability.extra.xmult } } }
@@ -5290,6 +5637,7 @@ SMODS.Joker {
         end
 	end
 }
+
 
 ----------------------------------------------
 ------------MOD CODE END----------------------
