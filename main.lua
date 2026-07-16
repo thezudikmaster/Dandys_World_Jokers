@@ -4,7 +4,7 @@
 --- MOD_AUTHOR: [Thezudik]
 --- MOD_DESCRIPTION: Your favorite toons as Jokers :).
 --- PREFIX: dwjokers
---- VERSION: 0.16.0
+--- VERSION: 0.18.0
 ----------------------------------------------
 ------------MOD CODE -------------------------
 
@@ -23,6 +23,16 @@ G.dwjokers_gigi_state_sprites = {
 
 -- G.GAME.dwjokers_vee_exists : marca si Vee existe en tu deck
 
+-- G.GAME.dwjokers_coal_exists : marca si Coal existe en tu deck
+
+-- G.GAME.dwjokers_pebble_exists : marca si Pebble existe en tu deck
+
+-- G.GAME.dwjokers_coal_can_predict : marca si Coal puede predecir cartas
+
+-- G.GAME.dwjokers_pebble_can_predict : marca si Pebble puede predecir cartas
+
+-- G.GAME.dwjokers_pebble_cards_to_predict : numero de cartas del deck a predecir para pebble
+
 -- G.GAME.dwjokers_bobette_bonus : bonus multiplicativo individual de Bobette (default: 2)
 
 -- G.GAME.dwjokers_editing_vee : carta de Vee que esta abriendo el super menu ahora mismo
@@ -39,8 +49,17 @@ G.dwjokers_gigi_state_sprites = {
 SMODS.current_mod.custom_card_areas = function(game)
 	
 	-- Prediction area para Coal (out of bounds)
-	game.dwjokers_prediction_area = CardArea(
+	game.dwjokers_coal_prediction_area = CardArea(
 		game.jokers.T.x, 
+		game.jokers.T.y -20,
+        game.jokers.T.w, 
+		game.jokers.T.h / 2,
+        { card_limit = 0, type = 'shop', highlight_limit = 0 }
+	)
+
+	-- Prediction area para Pebble (out of bounds)
+	game.dwjokers_pebble_prediction_area = CardArea(
+		game.jokers.T.x + 10, 
 		game.jokers.T.y -20,
         game.jokers.T.w, 
 		game.jokers.T.h / 2,
@@ -463,7 +482,7 @@ function Card:set_seal(_seal, silent, immediate)
 	return ret
 end
 
--- highlight hook para las mecanicas de bassie, vee y coal
+-- highlight hook para las mecanicas de bassie, vee, coal y pebble
 local highlight_ref = Card.highlight
 function Card:highlight(is_highlighted)
 	
@@ -512,11 +531,25 @@ function Card:highlight(is_highlighted)
 		end
 	end
 
+	-- para la mecanica de predicciones de pebble
+	if G.GAME.dwjokers_pebble_exists and ((G.GAME and G.GAME.blind and G.GAME.blind.in_blind) or (G.STATE == G.STATES.SHOP)) then
+		if is_highlighted and self.config.center.key == "j_dwjokers_Pebble" and self.area == G.jokers then
+			self.children.dwjokers_my_button_4 = dwjokers_create_pebble_button_ui(self)
+		elseif is_highlighted and G.GAME.dwjokers_pebble_can_predict then
+			return self:highlight_custom_bassie(is_highlighted)
+		elseif self.children.dwjokers_my_button_4 then
+			self.children.dwjokers_my_button_4:remove()
+			self.children.dwjokers_my_button_4 = nil
+		end
+	end
+
 	-- para twisted Dandy y Dyle
 	if is_highlighted and (self.config.center.key == "j_dwjokers_Dandy_twisted" or self.config.center.key == "j_dwjokers_Dyle_twisted") 
 	and self.area == G.jokers then
 		return self:highlight_custom_bassie(is_highlighted)
 	end
+
+	
 
   	return highlight_ref(self, is_highlighted)
 end
@@ -585,7 +618,7 @@ function Card:simulate_open(to_area)
     local temp_cards = {} -- Tabla para guardar las cartas físicamente hasta el final
     local booster_obj = self.config.center
     
-	-- SIMULACION DE CARD:OPEN() SIN EFECTOS VISUALES NI AMINACIONES
+	-- SIMULACION DE CARD:OPEN() SIN EFECTOS VISUALES NI ANIMACIONES
 	-- TOMANDO EN CUENTA LOS PATCHES HASTA SMODS 1.0.0 BETA 1016C
 
     local _size = math.max(1, (self.ability.extra or 0) + (G.GAME.modifiers.booster_size_mod or 0))
@@ -674,7 +707,9 @@ end
 -- card: booster pack predicho
 function print_predictions(t, card)
 	print("")
-	print(card.config.center.name)
+	if card and card.config and card.config.center and card.config.center.name then
+		print(card.config.center.name)
+	end
 	local str = ""
 	for i = 1, #t do
 
@@ -713,6 +748,71 @@ function print_predictions(t, card)
 
 		print(str)
 	end	
+end
+
+-- Predecir siguientes cartas a tomar del deck
+-- n: numero de cartas a predecir
+-- return: tabla de cartas predichas
+function get_pebble_predictions(n)
+    local predictions = {}
+    local deck_ref = G.deck.cards
+    local num_cards = #deck_ref
+    
+    if num_cards == 0 then return predictions end
+
+    -- 1. Backup del RNG para no desincronizar el mazo real
+    local backup_rng = {}
+    for k, v in pairs(G.GAME.pseudorandom) do backup_rng[k] = v end
+
+	-- Limpiamos el cardarea de pebble
+	G.GAME.dwjokers_pebble_predicted_cards = {}
+
+    -- 2. Empezamos desde la cima (final de la tabla)
+    for i = 1, math.min(n, num_cards) do
+        local real_card = deck_ref[num_cards - i + 1]
+        
+        -- 3. CREAR LA COPIA (Instancia independiente)
+        -- Argumentos de copy_card: (carta_original, area, skip_holos, card_id, no_collectible)
+        -- Usamos el último argumento como 'true' para que no cuente para la colección
+        local ghost_card = copy_card(real_card, nil, nil, nil, true)
+        
+        -- 4. Predicción de orientación (Flipped)
+        local is_flipped = false
+        if G.GAME.blind and G.GAME.blind:stay_flipped(G.hand, ghost_card) then
+            is_flipped = true
+        end
+
+        if G.GAME.modifiers.flipped_cards then
+            -- Esto consume un uso del RNG, por eso el backup es vital
+            if pseudorandom(pseudoseed('flipped_card')) < 1/G.GAME.modifiers.flipped_cards then
+                is_flipped = true
+            end
+        end
+
+        -- Aplicamos el estado visual a la COPIA únicamente
+        if is_flipped then
+            ghost_card.facing = 'down'
+            ghost_card.sprite_facing = 'down'
+        else
+            ghost_card.facing = 'up'
+            ghost_card.sprite_facing = 'up'
+        end
+
+        -- 5. Guardamos la copia en la tabla
+        table.insert(predictions, ghost_card)
+			ghost_card:set_card_area(G.dwjokers_pebble_prediction_area)
+			ghost_card:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 2*G.SETTINGS.GAMESPEED)
+			G.dwjokers_pebble_prediction_area:emplace(ghost_card, nil)
+    end
+
+    -- RESTAURACION COMPLETA DE PSEUDORANDOM
+
+	-- Este es importante por si se crearon mas espacios en pseudorandom, no se si ocurre pero mejor prevenir
+    for k, _ in pairs(G.GAME.pseudorandom) do G.GAME.pseudorandom[k] = nil end 
+
+    for k, v in pairs(backup_rng) do G.GAME.pseudorandom[k] = v end
+
+    return predictions
 end
 
 -- Revisar si una carta es de toon
@@ -1476,10 +1576,10 @@ end
 -- CALCULAR PREDICCIONES DE BOOSTER PACKS AL PRESIONAR EL BOTON DE COAL
 G.FUNCS.dwjokers_coal_predictions = function()
 	if not G.shop_booster then return end
-	G.dwjokers_prediction_area.cards = {}
+	G.dwjokers_coal_prediction_area.cards = {}
 	G.GAME.dwjokers_predicted_cards = {}
 	for i=1, #G.shop_booster.cards do
-		G.GAME.dwjokers_predicted_cards[i] = G.shop_booster.cards[i]:simulate_open(G.dwjokers_prediction_area)
+		G.GAME.dwjokers_predicted_cards[i] = G.shop_booster.cards[i]:simulate_open(G.dwjokers_coal_prediction_area)
 	end
 end	
 
@@ -1560,7 +1660,7 @@ function dwjokers_create_coal_button_ui(card)
   })
 end
 
--- drawstep for my_button
+-- drawstep for my_button_3
 SMODS.DrawStep {
   key = 'my_button_3',
   order = -30, -- before the Card is drawn
@@ -1667,6 +1767,185 @@ function G.UIDEF.dwjokers_coal_uibox_tab_definition()
         }
     }
 end
+
+
+------------ UI PARA LAS PREDICCIONES DE PEBBLE ---------------
+
+-- CALCULAR PREDICCIONES DE BOOSTER PACKS AL PRESIONAR EL BOTON DE PEBBLE
+G.FUNCS.dwjokers_pebble_predictions = function()
+	G.dwjokers_pebble_prediction_area.cards = {}
+	G.GAME.dwjokers_pebble_predicted_cards = {}
+	
+	G.GAME.dwjokers_pebble_predicted_cards = get_pebble_predictions(G.GAME.dwjokers_pebble_cards_to_predict)
+end	
+
+-- FUNCION DE SALIDA DE PEBBLE. ACTUALIZA G.GAME.dwjokers_pebble_can_predict = false.
+G.FUNCS.dwjokers_pebble_exit = function()
+
+	G.GAME.dwjokers_pebble_can_predict = false
+
+	G.FUNCS.exit_overlay_menu()
+end	
+
+-- CREAR EL MENU DE PEBBLE
+G.FUNCS.dwjokers_pebble_button = function(e)
+
+	-- Calculamos las predicciones al presionar el boton
+	G.FUNCS.dwjokers_pebble_predictions()
+
+	G.FUNCS.overlay_menu{
+		definition = G.UIDEF.dwjokers_pebble_uibox(),
+		pause = false
+	}
+end
+
+-- BOTON DE PEBBLE
+-- card: carta que llamo a la funcion
+-- return: UIBox del menu de predicciones de coal
+function dwjokers_create_pebble_button_ui(card)
+  return UIBox({
+    definition = {
+      n = G.UIT.ROOT,
+      config = {
+        colour = G.C.CLEAR
+      },
+      nodes = {
+        {
+          n = G.UIT.C,
+          config = {
+            align = 'cm',
+            padding = 0.15,
+            r = 0.08,
+            hover = true,
+            shadow = true,
+            colour = G.C.BLACK, -- color of the button background
+            button = 'dwjokers_pebble_button', -- function in G.FUNCS that will run when this button is clicked
+            ref_table = card,
+          },
+          nodes = {
+            {
+              n = G.UIT.R,
+              nodes = {
+                {
+                  n = G.UIT.T,
+                  config = {
+                    text = "PREDICTIONS",
+                    colour = G.C.UI.TEXT_LIGHT, -- color of the button text,
+                    scale = 0.4,
+                  }
+                },
+                {
+                  n = G.UIT.B,
+                  config = {
+                    w = 0.1,
+                    h = 0.4
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    config = {
+      align = 'bm', -- position relative to the card, meaning "center left". Follow the SMODS UI guide for more alignment options
+      major = card,
+      parent = card,
+      offset = { x = 0.2, y = 0 } -- depends on the alignment you want, without an offset the button will look as if floating next to the card, instead of behind it
+    }
+  })
+end
+
+-- drawstep for my_button_4
+SMODS.DrawStep {
+  key = 'my_button_4',
+  order = -30, -- before the Card is drawn
+  func = function(card, layer)
+    if card.children.dwjokers_my_button_4 then
+      card.children.dwjokers_my_button_4:draw()
+    end
+  end
+}
+
+-- make sure SMODS doesn't draw the button after the card is drawn
+SMODS.draw_ignore_keys.dwjokers_my_button_4 = true
+
+-- CREAR UI BASE DEL MENU DE COAL
+-- return: menu generico de opciones (da un boton de back muy util)
+function G.UIDEF.dwjokers_pebble_uibox()
+  return create_UIBox_generic_options({back_func = "dwjokers_pebble_exit", contents ={create_tabs(
+    {colour = G.C.BLACK,
+		tabs = {
+          {
+            label = "PEBBLE PREDICTIONS",
+            chosen = true,
+			tab_definition_function = G.UIDEF.dwjokers_pebble_uibox_tab_definition
+		  }
+    },
+    tab_h = 4,
+    snap_to_nav = true})}})
+end
+
+-- CREAR INTERIOR DEL MENU DE COAL
+-- return: nodos con un cardarea para booster packs y otra para las cartas predichas
+function G.UIDEF.dwjokers_pebble_uibox_tab_definition()
+    G.GAME.dwjokers_pebble_can_predict = true
+    local main_nodes = {}
+
+    -- 1. Verificamos si quedan cartas en el deck
+    if #G.deck.cards > 0 then
+        
+        local pebble_cards = CardArea(
+            2, 2,
+            math.min(2 * G.GAME.dwjokers_pebble_cards_to_predict, 8 * G.CARD_W),
+            0.75 * G.CARD_H, 
+            {card_limit = G.GAME.dwjokers_pebble_cards_to_predict, type = 'joker'}
+        )
+
+		for i = 1, #G.GAME.dwjokers_pebble_predicted_cards do
+			local card_to_copy = G.GAME.dwjokers_pebble_predicted_cards[i]
+			-- Creamos la copia visual para el área de predicción
+			local new_card = copy_card(card_to_copy, nil, nil, card_to_copy.playing_card)
+			new_card:start_materialize({G.C.WHITE, G.C.WHITE}, nil, 2*G.SETTINGS.GAMESPEED)
+			pebble_cards:emplace(new_card)
+		end
+
+        -- Definimos los nodos con las áreas
+        main_nodes = {
+            {n=G.UIT.R, config={align = "cm"}, nodes={{n=G.UIT.O, config={object = pebble_cards}}}}
+        }
+    else
+        
+        main_nodes = {
+            {n=G.UIT.R, config={align = "cm", padding = 0.5, minh = 2}, nodes={
+                {
+                    n=G.UIT.T, 
+                    config={
+                        text = "Bark!", 
+                        colour = G.C.UI.TEXT_LIGHT, 
+                        scale = 0.5, 
+                        shadow = true
+                    }
+                }
+            }}
+        }
+    end
+
+    -- 2. Retornamos la estructura raíz
+    return {
+        n=G.UIT.ROOT, 
+        config={align = "cm", minw = 15, padding = 0.1, r = 0.1, colour = G.C.CLEAR}, 
+        nodes={
+            {
+                n=G.UIT.C, 
+                config={align = "cm", padding = 0.2}, 
+                nodes = main_nodes
+            }
+        }
+    }
+end
+
+
 
 
 ------------ ATLAS --------------
@@ -2006,6 +2285,104 @@ SMODS.Voucher {
 
     end
 }
+
+------------ CONSUMABLES ------------
+
+-- Ichor Operation
+SMODS.Consumable {
+    key = 'ichor_operation',
+	loc_txt = {
+		name = "Ichor Operation",
+		text = {
+			"Adds or removes the {X:black,C:white}ichor{}",
+			"enhancement of up to",
+			"{C:attention}#1#{} selected cards"
+		}
+	},
+    set = 'Tarot',
+    unlocked = true, 
+	discovered = true,
+	atlas = 'Other_cards',
+    pos = { x = 4, y = 1 },
+	cost = 10,
+    config = { max_highlighted = 3, enhancement = 'm_dwjokers_ichor' },
+    loc_vars = function(self, info_queue, card)
+        return { vars = { card.ability.max_highlighted, card.ability.enhancement} }
+    end,
+	use = function(self, card, area, copier)
+        G.E_MANAGER:add_event(Event({
+            trigger = 'after',
+            delay = 0.4,
+            func = function()
+                play_sound('tarot1')
+                card:juice_up(0.3, 0.5)
+                return true
+            end
+        }))
+        for i = 1, #G.hand.highlighted do
+            local percent = 1.15 - (i - 0.999) / (#G.hand.highlighted - 0.998) * 0.3
+            G.E_MANAGER:add_event(Event({
+                trigger = 'after',
+                delay = 0.15,
+                func = function()
+                    G.hand.highlighted[i]:flip()
+                    play_sound('card1', percent)
+                    G.hand.highlighted[i]:juice_up(0.3, 0.3)
+                    return true
+                end
+            }))
+        end
+        delay(0.2)
+        for i = 1, #G.hand.highlighted do
+			if G.hand.highlighted[i].config and G.hand.highlighted[i].config.center and 
+			G.hand.highlighted[i].config.center.key == 'm_dwjokers_ichor' then
+				G.E_MANAGER:add_event(Event({
+					trigger = 'after',
+					delay = 0.1,
+					func = function()
+						G.hand.highlighted[i]:set_ability("c_base")
+						return true
+					end
+				}))
+			else
+				G.E_MANAGER:add_event(Event({
+					trigger = 'after',
+					delay = 0.1,
+					func = function()
+						G.hand.highlighted[i]:set_ability(card.ability.enhancement)
+						return true
+					end
+				}))
+			end
+        end
+        for i = 1, #G.hand.highlighted do
+            local percent = 0.85 + (i - 0.999) / (#G.hand.highlighted - 0.998) * 0.3
+            G.E_MANAGER:add_event(Event({
+                trigger = 'after',
+                delay = 0.15,
+                func = function()
+                    G.hand.highlighted[i]:flip()
+                    play_sound('tarot2', percent, 0.6)
+                    G.hand.highlighted[i]:juice_up(0.3, 0.3)
+                    return true
+                end
+            }))
+        end
+        G.E_MANAGER:add_event(Event({
+            trigger = 'after',
+            delay = 0.2,
+            func = function()
+                G.hand:unhighlight_all()
+                return true
+            end
+        }))
+        delay(0.5)
+    end,
+    can_use = function(self, card)
+        return G.hand and #G.hand.highlighted > 0 and #G.hand.highlighted <= card.ability.max_highlighted
+    end
+}
+
 
 ------------ JOKERS --------------
 
@@ -3830,7 +4207,7 @@ SMODS.Joker {
 		G.GAME.dwjokers_coal_exists = true
 	end,
 	remove_from_deck = function(self, card, from_debuff)
-		G.dwjokers_prediction_area.cards = {}
+		G.dwjokers_coal_prediction_area.cards = {}
 		-- revisamos que no queden Coals entre los jokers
 		for _, joker in ipairs(G.jokers.cards) do
 			if joker.config.center.key == "j_dwjokers_Coal" and joker ~= card then
@@ -3883,7 +4260,7 @@ SMODS.Joker {
 
 		-- removemos el boton de predictions y reiniciamos el cardarea al abrir un booster
 		if context.open_booster then
-			G.dwjokers_prediction_area.cards = {}
+			G.dwjokers_coal_prediction_area.cards = {}
 			if card.children.dwjokers_my_button_3 then
 				card.children.dwjokers_my_button_3:remove()
 				card.children.dwjokers_my_button_3 = nil
@@ -3892,7 +4269,7 @@ SMODS.Joker {
 
 		-- ditto, al terminar la tienda
 		if context.ending_shop then
-			G.dwjokers_prediction_area.cards = {}
+			G.dwjokers_coal_prediction_area.cards = {}
 			if card.children.dwjokers_my_button_3 then
 				card.children.dwjokers_my_button_3:remove()
 				card.children.dwjokers_my_button_3 = nil
@@ -3901,7 +4278,7 @@ SMODS.Joker {
 
 		-- ditto, al comprar una carta
 		if context.buying_card then
-			G.dwjokers_prediction_area.cards = {}
+			G.dwjokers_coal_prediction_area.cards = {}
 		end	
 
 		
@@ -4126,13 +4503,18 @@ SMODS.Joker {
 	end
 }
 
--- Pebble (WIP)
+-- Pebble
+-- un poco hecho a la carrera, intentare optimizar su codigo en un futuro
 SMODS.Joker {
 	key = 'Pebble',
 	loc_txt = {
 		name = 'Pebble',
 		text = {
-			"WIP"
+			"See the next {C:attention}#1#{} playing cards",
+			"to draw from your deck",
+			"in the {X:black,C:white}PREDICTIONS{} menu",
+			"by clicking this {X:edition}Toon{} while",
+			"in {C:attention}Blind{} or in {C:attention}Shop{}"
 		}
 	},
 	unlocked = true, 
@@ -4145,18 +4527,60 @@ SMODS.Joker {
 	pos = { x = 3, y = 0 },
 	soul_pos = { x = 3, y = 1 },
 	cost = 20,
-	config = { extra = {} },
+	config = { extra = {deck_cards = 5} },
 	loc_vars = function(self, info_queue, card)
-		return { vars = {} }
+		return { vars = {card.ability.extra.deck_cards} }
 	end,
 	set_badges = function(self, card, badges)
  		badges[#badges+1] = create_badge('Toon', G.C.EDITION, G.C.BLACK, 1.2 )
  	end,
 	add_to_deck = function(self, card, from_debuff)
+		-- Pebble existe, para poder predecir
+		G.GAME.dwjokers_pebble_exists = true
+		G.GAME.dwjokers_pebble_cards_to_predict = card.ability.extra.deck_cards
 	end,
+	remove_from_deck = function(self, card, from_debuff)
+		G.dwjokers_coal_prediction_area.cards = {}
+		-- revisamos que no queden Coals entre los jokers
+		for _, joker in ipairs(G.jokers.cards) do
+			if joker.config.center.key == "j_dwjokers_Pebble" and joker ~= card then
+				return
+			end	
+		end
+		G.GAME.dwjokers_pebble_exists = false
+	end,	
     calculate = function(self, card, context)
+        
+		-- removemos el boton de predictions y reiniciamos el cardarea al tomar cartas
+		if context.drawing_cards then
+			G.dwjokers_pebble_prediction_area.cards = {}
+			if card.children.dwjokers_my_button_4 then
+				card.children.dwjokers_my_button_4:remove()
+				card.children.dwjokers_my_button_4 = nil
+			end
+		end
+
+		-- ditto, antes de cada mano
+		if context.before then
+			G.dwjokers_pebble_prediction_area.cards = {}
+			if card.children.dwjokers_my_button_4 then
+				card.children.dwjokers_my_button_4:remove()
+				card.children.dwjokers_my_button_4 = nil
+			end
+		end
+
+		-- ditto, al descartar cartas
+		if context.pre_discard then
+			G.dwjokers_pebble_prediction_area.cards = {}
+			if card.children.dwjokers_my_button_4 then
+				card.children.dwjokers_my_button_4:remove()
+				card.children.dwjokers_my_button_4 = nil
+			end
+		end	
+
 		
-	end
+
+    end
 }
 
 -- Shelly
@@ -4855,7 +5279,7 @@ SMODS.Joker {
 
         if context.joker_main then
 
-			-- vemos si se convierte en twisted
+			-- vemos si se convierte en toon
 			if SMODS.pseudorandom_probability(card, 'dwjokers_twisted_dyle', card.ability.extra.twisted_count, 100) then
 				card:set_ability("j_dwjokers_Dyle")
 			end
