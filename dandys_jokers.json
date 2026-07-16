@@ -1,0 +1,12 @@
+{
+	"id": "dandys_jokers",
+	"name": "Dandy's World Jokers",
+	"display_name": "Dandy's World Jokers",
+	"author": ["Thezudik"],
+	"description": "Your favorite toons as Jokers :)",
+	"prefix": "dwjokers",
+	"main_file": "main.lua",
+	"priority": -1,
+	"version": "0.25.0",
+    "icon_path": "icon.png"
+}
