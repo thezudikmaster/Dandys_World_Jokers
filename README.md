@@ -32,7 +32,9 @@ Thus not required, I highly recommend also installing this mods:
 * [Amulet](https://github.com/frostice482/amulet): Mod that adds support for scoring above vanilla limit (e308).
 
 # CREDITS
-[Bloom](https://x.com/Bassiexrndlover) for making great Toon Sprites for the mod :)
+[Bloom](https://x.com/Bassiexrndlover) for making great Toon sprites for the mod :)
 
-[Cocoa](https://x.com/cocoachironic) for making great Consumables/Booster Packs Sprites for the mod :)
+[Cocoa](https://x.com/cocoachironic) for making great Consumables/Booster Packs sprites for the mod :)
+
+Deviantt.Artistic (@Deviantt.Art in Discord) for making great sprites, playtesting and brainstorm ideas for the mod :)
 
