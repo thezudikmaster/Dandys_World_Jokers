@@ -11,6 +11,8 @@ Currently Dandy's World Jokers adds the following:
 
 <img width="752" height="537" alt="image" src="https://github.com/user-attachments/assets/e35bb557-4c84-48c2-b8b3-0c7ed2db8c13" />
 
+<img width="589" height="405" alt="image" src="https://github.com/user-attachments/assets/eae53d39-a94e-45ae-aef5-a129d62b53a3" />
+
 +1 Challenge
 
 # INSTALLATION
