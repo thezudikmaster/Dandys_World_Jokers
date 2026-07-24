@@ -3385,28 +3385,6 @@ SMODS.Blind {
 
 }
 
--- The Springfever
-SMODS.Blind {
-	key = "springfever",
-	loc_txt = {
-		name = "The Springfever",
-		text = {
-			"(WIP)",
-		}
-	},
-	discovered = true,
-	atlas = "blindchips",
-	pos = { x = 0, y = 1},
-	dollars = 5,
-	mult = 2,
-	boss = { min = 1},
-	boss_colour = HEX("B45EFF"),
-	calculate = function(self, blind, context)
-
-    end
-
-}
-
 ------------ JOKERS --------------
 
 --- COMUNES
