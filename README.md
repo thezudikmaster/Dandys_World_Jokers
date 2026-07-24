@@ -25,7 +25,7 @@ This mod only requires [Steamodded (SMODS)](https://github.com/Steamodded/smods)
 **4.** Enjoy!
 
 # RECOMMENDED MODS
-Thus not required, I highly recommend also installing this mods:
+Although not required, I highly recommend also installing this mods:
 
 * [Cartomancer](https://github.com/stupxd/Cartomancer): A really good mod with a lot of Quality of Life and optimization improvements.
 * [Saturn](https://github.com/OceanRamen/Saturn): Another mod with QoL improvements like more speeds, disable animations, etc.
