@@ -7,6 +7,6 @@
 	"prefix": "dwjokers",
 	"main_file": "main.lua",
 	"priority": -1,
-	"version": "0.25.1",
+	"version": "0.26.0",
     "icon_path": "icon.png"
 }

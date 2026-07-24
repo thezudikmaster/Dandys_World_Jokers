@@ -2526,46 +2526,37 @@ SMODS.Edition({
         return { vars = {self.edition.x_chips} }
     end,
 	calculate = function(self, card, context)
-
-		-- si es carta jugable
-        if context.main_scoring and (context.cardarea == G.play or context.cardarea == G.hand) then
+		-- si es carta jugable o joker
+        if (context.main_scoring and (context.cardarea == G.play or context.cardarea == G.hand)) or
+		(context.post_joker and context.cardarea == G.jokers) then
             return {
                 x_chips = card.edition.x_chips
             }
         end
-
-		-- si es joker
-		if context.pre_joker and context.cardarea == G.jokers then
-			return {
-                x_chips = card.edition.x_chips
-            }
-		end
     end
 })
 
--- Springfever edition (WIP)
+-- Springfever edition
 SMODS.Edition({
     key = "springfever",
     loc_txt = {
         name = "Spring Fever",
         label = "Spring Fever",
         text = {
-           "WIP"
+           "WIP",
         }
     },
     shader = "springfever",
     discovered = true,
     unlocked = true,
-    config = { },
-    in_shop = true,
-    weight = 8,
+    config = {},
+    in_shop = false,
+    weight = 0,
     extra_cost = 6,
     apply_to_float = true,
-    loc_vars = function(self)
-	
-    end,
+    loc_vars = function(self, info_queue, card)
+	 end,
 	calculate = function(self, card, context)
-
     end
 })
 
@@ -3394,6 +3385,27 @@ SMODS.Blind {
 
 }
 
+-- The Springfever
+SMODS.Blind {
+	key = "springfever",
+	loc_txt = {
+		name = "The Springfever",
+		text = {
+			"(WIP)",
+		}
+	},
+	discovered = true,
+	atlas = "blindchips",
+	pos = { x = 0, y = 1},
+	dollars = 5,
+	mult = 2,
+	boss = { min = 1},
+	boss_colour = HEX("B45EFF"),
+	calculate = function(self, blind, context)
+
+    end
+
+}
 
 ------------ JOKERS --------------
 
